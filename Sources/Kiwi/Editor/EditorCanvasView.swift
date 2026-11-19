@@ -9,8 +9,9 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     /// Called when the user presses Return on the canvas.
     var onDone: (() -> Void)?
 
-    /// Space reserved for the floating toolbars above and below the image.
-    private let insets = NSEdgeInsets(top: 78, left: 36, bottom: 78, right: 36)
+    /// Space reserved for the floating controls above and below the image.
+    /// It grows when a narrow window wraps the controls onto two rows.
+    private var insets: NSEdgeInsets { EditorLayout.canvasInsets(forWidth: bounds.width) }
 
     private var draft: Annotation?
     private var cropStart: CGPoint?

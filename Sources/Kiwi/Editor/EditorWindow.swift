@@ -137,8 +137,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         let visible = (NSScreen.underMouse ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let natural = capture.pointSize
-        let width = min(max(natural.width + 72, 1060), visible.width * 0.92)
-        let height = min(max(natural.height + 156, 560), visible.height * 0.9)
+        let width = min(max(natural.width + 72, EditorLayout.comfortableWidth), visible.width * 0.92)
+        let height = min(max(natural.height + 156, 600), visible.height * 0.9)
         let frame = NSRect(
             x: visible.midX - width / 2,
             y: visible.midY - height / 2,
@@ -158,7 +158,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .underPageBackgroundColor
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 1060, height: 520)
+        window.contentMinSize = EditorLayout.minimumWindowSize
         window.delegate = self
         window.onCommand = { [weak self] command in self?.perform(command) }
 
@@ -374,22 +374,21 @@ private struct EditorRootView: View {
     let perform: (EditorCommand) -> Void
 
     var body: some View {
+        GeometryReader { geometry in
+            chrome(width: geometry.size.width)
+        }
+    }
+
+    /// The canvas with the floating controls on top, arranged for `width`.
+    private func chrome(width: CGFloat) -> some View {
         ZStack {
             CanvasRepresentable(canvas: canvas)
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                HStack(alignment: .top, spacing: 12) {
-                    nameField
-                    Spacer(minLength: 0)
-                    toolBar
-                }
+                topControls(EditorLayout.top(forWidth: width))
                 Spacer(minLength: 0)
-                HStack(alignment: .bottom, spacing: 12) {
-                    styleBar
-                    Spacer(minLength: 0)
-                    actionBar
-                }
+                bottomControls(EditorLayout.bottom(forWidth: width))
             }
             .padding(.horizontal, 16)
             .padding(.top, 10)
@@ -397,8 +396,61 @@ private struct EditorRootView: View {
         }
     }
 
-    // The capture's name, top left. Editing it renames the capture.
-    private var nameField: some View {
+    // MARK: Rows
+
+    @ViewBuilder
+    private func topControls(_ layout: EditorLayout.Top) -> some View {
+        switch layout {
+        case .full:
+            HStack(alignment: .top, spacing: 12) {
+                nameField(maxWidth: 230)
+                Spacer(minLength: 0)
+                toolBar(redactLabel: true)
+            }
+        case .medium:
+            HStack(alignment: .top, spacing: 12) {
+                nameField(maxWidth: 150)
+                Spacer(minLength: 0)
+                toolBar(redactLabel: false)
+            }
+        case .stacked:
+            VStack(spacing: 6) {
+                HStack(spacing: 12) {
+                    nameField(maxWidth: .infinity)
+                    utilityBar
+                }
+                toolStrip
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func bottomControls(_ layout: EditorLayout.Bottom) -> some View {
+        switch layout {
+        case .full:
+            HStack(alignment: .bottom, spacing: 12) {
+                styleBar
+                Spacer(minLength: 0)
+                actionBar(showLabels: true)
+            }
+        case .icons:
+            HStack(alignment: .bottom, spacing: 12) {
+                styleBar
+                Spacer(minLength: 0)
+                actionBar(showLabels: false)
+            }
+        case .stacked:
+            VStack(spacing: 8) {
+                styleBar
+                actionBar(showLabels: false)
+            }
+        }
+    }
+
+    // MARK: Top pieces
+
+    /// The capture's name. Editing it renames the capture.
+    private func nameField(maxWidth: CGFloat) -> some View {
         HStack(spacing: 7) {
             Image(systemName: "pencil")
                 .font(.system(size: 12, weight: .semibold))
@@ -409,38 +461,82 @@ private struct EditorRootView: View {
                 .onSubmit { perform(.rename) }
         }
         .padding(.horizontal, 14)
-        .frame(width: 230, height: 42)
+        .frame(minWidth: 110, maxWidth: maxWidth)
+        .frame(height: 42)
         .glassEffect(.regular, in: .capsule)
         .help("Rename this capture: type a name and press Return")
     }
 
-    // Tools and history, top right.
-    private var toolBar: some View {
+    /// Everything on one capsule: tools, history, redact, zoom.
+    private func toolBar(redactLabel: Bool) -> some View {
         HStack(spacing: 2) {
-            ForEach(Tool.allCases) { tool in
-                Button {
-                    canvas.commitText()
-                    model.tool = tool
-                } label: {
-                    Image(systemName: tool.symbol)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(model.tool == tool ? Color.white : Color.primary)
-                        .frame(width: 32, height: 32)
-                        .background {
-                            if model.tool == tool {
-                                Circle().fill(Theme.kiwi)
-                            }
+            toolButtons
+            separator
+            historyButtons
+            separator
+            redactButton(showLabel: redactLabel)
+            separator
+            zoomControls
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    /// The drawing tools alone, for the second row of a narrow window.
+    private var toolStrip: some View {
+        HStack(spacing: 2) {
+            toolButtons
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    /// History, redact and zoom, beside the name in a narrow window.
+    private var utilityBar: some View {
+        HStack(spacing: 2) {
+            historyButtons
+            separator
+            redactButton(showLabel: false)
+            separator
+            zoomControls
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .glassEffect(.regular, in: .capsule)
+    }
+
+    private var separator: some View {
+        Divider()
+            .frame(height: 18)
+            .padding(.horizontal, 6)
+    }
+
+    private var toolButtons: some View {
+        ForEach(Tool.allCases) { tool in
+            Button {
+                canvas.commitText()
+                model.tool = tool
+            } label: {
+                Image(systemName: tool.symbol)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(model.tool == tool ? Color.white : Color.primary)
+                    .frame(width: 32, height: 32)
+                    .background {
+                        if model.tool == tool {
+                            Circle().fill(Theme.kiwi)
                         }
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .help("\(tool.title) (\(tool.key.uppercased()))")
+                    }
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .help("\(tool.title) (\(tool.key.uppercased()))")
+        }
+    }
 
-            Divider()
-                .frame(height: 18)
-                .padding(.horizontal, 6)
-
+    private var historyButtons: some View {
+        HStack(spacing: 2) {
             Button { perform(.undo) } label: {
                 Image(systemName: "arrow.uturn.backward")
                     .font(.system(size: 13, weight: .medium))
@@ -460,31 +556,25 @@ private struct EditorRootView: View {
             .buttonStyle(.plain)
             .disabled(!model.canRedo)
             .help("Redo (⇧⌘Z)")
-
-            Divider()
-                .frame(height: 18)
-                .padding(.horizontal, 6)
-
-            Button { perform(.autoRedact) } label: {
-                Label("Redact", systemImage: "wand.and.stars")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .padding(.horizontal, 10)
-                    .frame(height: 30)
-                    .background(Capsule().fill(Color.primary.opacity(0.1)))
-                    .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help("Find and cover emails, phone numbers, cards, IDs, keys and addresses (⌘R)")
-
-            Divider()
-                .frame(height: 18)
-                .padding(.horizontal, 6)
-
-            zoomControls
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .glassEffect(.regular, in: .capsule)
+    }
+
+    private func redactButton(showLabel: Bool) -> some View {
+        Button { perform(.autoRedact) } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "wand.and.stars")
+                if showLabel {
+                    Text("Redact")
+                }
+            }
+            .font(.system(size: 12.5, weight: .semibold))
+            .padding(.horizontal, showLabel ? 10 : 8)
+            .frame(height: 30)
+            .background(Capsule().fill(Color.primary.opacity(0.1)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Redact: find and cover emails, phone numbers, cards, IDs, keys and addresses (⌘R)")
     }
 
     private var zoomControls: some View {
@@ -518,7 +608,9 @@ private struct EditorRootView: View {
         }
     }
 
-    // Colour and thickness, bottom left.
+    // MARK: Bottom pieces
+
+    /// Colour and thickness.
     private var styleBar: some View {
         HStack(spacing: 6) {
             ForEach(Theme.palette.indices, id: \.self) { index in
@@ -576,8 +668,18 @@ private struct EditorRootView: View {
         }
     }
 
-    // What to do with the result, bottom right.
-    private var actionBar: some View {
+    /// A button label that keeps its icon and drops its text when space is short.
+    @ViewBuilder
+    private func actionLabel(_ title: String, _ symbol: String, showLabel: Bool) -> some View {
+        if showLabel {
+            Label(title, systemImage: symbol)
+        } else {
+            Image(systemName: symbol)
+        }
+    }
+
+    /// What to do with the result.
+    private func actionBar(showLabels: Bool) -> some View {
         HStack(spacing: 8) {
             Button { perform(.delete) } label: {
                 Image(systemName: "trash")
@@ -588,7 +690,7 @@ private struct EditorRootView: View {
             .help("Delete this screenshot (⌘⌫)")
 
             Button { perform(.save) } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
+                actionLabel("Save", "square.and.arrow.down", showLabel: showLabels)
             }
             .buttonStyle(.glass)
             .help("Save to your screenshots folder (⌘S). ⇧⌘S to choose a location.")
@@ -598,14 +700,14 @@ private struct EditorRootView: View {
                     Button("Save as \(format.title)") { perform(.export(format)) }
                 }
             } label: {
-                Label("Convert", systemImage: "arrow.triangle.2.circlepath")
+                actionLabel("Convert", "arrow.triangle.2.circlepath", showLabel: showLabels)
             }
             .buttonStyle(.glass)
             .fixedSize()
-            .help("Save the edited image to your screenshots folder in another format")
+            .help("Convert: save the edited image to your screenshots folder in another format")
 
             Button { perform(.copy) } label: {
-                Label("Copy", systemImage: "doc.on.doc")
+                actionLabel("Copy", "doc.on.doc", showLabel: showLabels)
             }
             .buttonStyle(.glass)
             .help("Copy to clipboard (⌘C)")
