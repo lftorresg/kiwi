@@ -75,9 +75,16 @@ enum PIIScanner {
         var rects: [CGRect] = []
 
         if !options.categories.isEmpty {
+            let wantsIDs = options.categories.contains(.nationalID)
+            var previousWasIDLabel = false
             for observation in textRequest.results ?? [] {
                 guard let candidate = observation.topCandidates(1).first else { continue }
                 let text = candidate.string
+                // A caption such as "RG" on one line and the number on the next.
+                if wantsIDs, previousWasIDLabel, PIIDetector.looksLikeIDNumber(text) {
+                    rects.append(pixelRect(observation.boundingBox, padding: 0.1))
+                }
+                previousWasIDLabel = PIIDetector.isIDLabel(text)
                 for match in PIIDetector.matches(in: text, categories: options.categories) {
                     if let located = try? candidate.boundingBox(for: match.range) {
                         rects.append(pixelRect(located.boundingBox, padding: 0.18))

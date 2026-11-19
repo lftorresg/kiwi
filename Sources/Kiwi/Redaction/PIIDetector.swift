@@ -16,7 +16,7 @@ enum PIICategory: String, CaseIterable, Identifiable {
         case .email: return "Email addresses"
         case .phone: return "Phone numbers"
         case .card: return "Payment card numbers"
-        case .nationalID: return "National IDs (CPF, SSN)"
+        case .nationalID: return "National IDs (CPF, RG, SSN)"
         case .secret: return "Passwords, API keys and tokens"
         case .network: return "IP and MAC addresses"
         }
@@ -63,6 +63,20 @@ enum PIIDetector {
         rule(.nationalID, #"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)"#),
         // Brazilian CPF, formatted or bare, passing its check digits.
         rule(.nationalID, #"(?<![\d.])\d{3}\.?\d{3}\.?\d{3}-?\d{2}(?![\d.])"#, validate: { PIIChecks.cpf($0) }),
+        // Brazilian RG. It has no national format or checksum, so it is recognised three ways:
+        // the classic dotted shape with a check digit, a number announced by a label,
+        // and a number followed by its issuing body (SSP, SDS, DETRAN...).
+        rule(.nationalID, #"(?<![\d.])\d{1,2}\.\d{3}\.\d{3}-[\dXx](?![\dA-Za-z])"#),
+        rule(
+            .nationalID,
+            #"(?i)(?<![A-Za-z])(?:RG|R\.G\.?|identidade|registro\s+geral)(?![A-Za-z])\D{0,15}?(\d[\d.]{4,11}(?:-[\dXx])?)"#,
+            group: 1
+        ),
+        rule(
+            .nationalID,
+            #"(?<![\d.])(\d{1,2}\.?\d{3}\.?\d{3}(?:-?[\dXx])?)\s*(?:SSP|SDS|SESP|SEJUSP|SESDS|DETRAN|IGP|IFP)(?![A-Za-z])"#,
+            group: 1
+        ),
 
         // Phone numbers: international prefix, Brazilian and North American shapes.
         rule(.phone, #"(?<![\w+])\+\d{1,3}[ \-.]?(?:\(?\d{1,4}\)?[ \-.]?){2,4}\d{2,4}(?!\d)"#),
@@ -98,6 +112,30 @@ enum PIIDetector {
         rule(.network, #"(?<![0-9A-Fa-f:])(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}(?![0-9A-Fa-f:])"#),
         rule(.network, #"(?<![0-9A-Fa-f:\-])(?:[0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}(?![0-9A-Fa-f:\-])"#),
     ].compactMap { $0 }
+
+    // On ID cards and forms the caption and the number often sit on separate
+    // lines, so the scanner also asks about a line and the one after it.
+    private static let idLabelPattern = #"(?i)^\W*(?:RG|R\.G\.?|registro\s+geral|(?:carteira\s+de\s+)?identidade|doc(?:umento)?\.?\s+(?:de\s+)?identidade|n[ºo°.]{0,2}\s*(?:do\s+)?(?:RG|registro)|CPF|CNH|SSN|social\s+security(?:\s+number)?)\W*$"#
+    private static let idNumberPattern = #"^\W*\d[\d.\-/ ]{3,18}[\dXx]\W*$"#
+    private static let idLabel = try? NSRegularExpression(pattern: idLabelPattern, options: [])
+    private static let idNumber = try? NSRegularExpression(pattern: idNumberPattern, options: [])
+
+    private static func matchesWhole(_ regex: NSRegularExpression?, _ text: String) -> Bool {
+        guard let regex else { return false }
+        let whole = NSRange(text.startIndex..<text.endIndex, in: text)
+        return regex.firstMatch(in: text, options: [], range: whole) != nil
+    }
+
+    /// True when a line is only the caption of an ID field ("RG", "Registro Geral", "CPF"...).
+    static func isIDLabel(_ text: String) -> Bool {
+        matchesWhole(idLabel, text)
+    }
+
+    /// True when a line is nothing but an ID-shaped number.
+    static func looksLikeIDNumber(_ text: String) -> Bool {
+        guard matchesWhole(idNumber, text) else { return false }
+        return text.filter(\.isNumber).count >= 5
+    }
 
     private static let phoneDetector = try? NSDataDetector(
         types: NSTextCheckingResult.CheckingType.phoneNumber.rawValue
