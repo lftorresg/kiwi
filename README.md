@@ -91,7 +91,7 @@ Recordings are MP4 at up to 60 fps, scaled to 4K at most, written directly by Sc
 | O | Ellipse | C | Crop |
 | P | Pen | H | Highlighter |
 
-Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles.
+Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles. With the Select tool, drag a shape to move it or drag one of its handles to resize it.
 
 | Shortcut | Action |
 | --- | --- |

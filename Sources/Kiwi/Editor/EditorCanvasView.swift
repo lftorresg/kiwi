@@ -18,6 +18,17 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     private var movingID: UUID?
     private var lastMovePoint: CGPoint?
     private var didCheckpointMove = false
+
+    /// A resize in progress: `anchor` stays put while the other point follows the pointer.
+    private struct Resize {
+        let id: UUID
+        let anchor: CGPoint
+        let movesStart: Bool
+        let lineLike: Bool
+        let clampToImage: Bool
+    }
+    private var resizing: Resize?
+    private var didCheckpointResize = false
     private var textField: NSTextField?
     private var textOrigin: CGPoint = .zero
     private var subscription: AnyCancellable?
@@ -318,6 +329,65 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         context.addPath(NSBezierPath(roundedRect: outline, xRadius: 6, yRadius: 6).cgPath)
         context.strokePath()
         context.restoreGState()
+        drawHandles(for: selected, in: context)
+    }
+
+    /// Handle positions for an annotation, in image pixels. Lines and arrows get
+    /// one per end; boxes get one per corner. Freehand marks, text and step
+    /// numbers can be moved but not resized.
+    private func handlePoints(for annotation: Annotation) -> [CGPoint] {
+        switch annotation.kind {
+        case .arrow, .line:
+            return [annotation.start, annotation.end]
+        case .rect, .ellipse, .pixelate, .redact:
+            let r = annotation.rect
+            return [
+                CGPoint(x: r.minX, y: r.minY),
+                CGPoint(x: r.maxX, y: r.minY),
+                CGPoint(x: r.maxX, y: r.maxY),
+                CGPoint(x: r.minX, y: r.maxY),
+            ]
+        case .pen, .highlighter, .text, .counter:
+            return []
+        }
+    }
+
+    /// The resize that starts when the pointer goes down at `point`, if it is on a handle.
+    private func resize(of annotation: Annotation, at point: CGPoint) -> Resize? {
+        let reach = 9 / zoom
+        let points = handlePoints(for: annotation)
+        guard let index = points.firstIndex(where: { hypot($0.x - point.x, $0.y - point.y) <= reach }) else {
+            return nil
+        }
+        switch annotation.kind {
+        case .arrow, .line:
+            let grabbedStart = (index == 0)
+            return Resize(
+                id: annotation.id,
+                anchor: grabbedStart ? annotation.end : annotation.start,
+                movesStart: grabbedStart,
+                lineLike: true,
+                clampToImage: false
+            )
+        default:
+            // The corner diagonally opposite the grabbed one stays fixed.
+            let opposite = points[(index + 2) % 4]
+            let boxed = (annotation.kind == .pixelate || annotation.kind == .redact)
+            return Resize(id: annotation.id, anchor: opposite, movesStart: false, lineLike: false, clampToImage: boxed)
+        }
+    }
+
+    private func drawHandles(for annotation: Annotation, in context: CGContext) {
+        let radius: CGFloat = 4.5
+        for point in handlePoints(for: annotation) {
+            let centre = viewRect(for: CGRect(origin: point, size: .zero)).origin
+            let circle = CGRect(x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2)
+            context.setFillColor(NSColor.white.cgColor)
+            context.fillEllipse(in: circle)
+            context.setStrokeColor(Theme.kiwiNS.cgColor)
+            context.setLineWidth(1.5)
+            context.strokeEllipse(in: circle)
+        }
     }
 
     private func drawCropOverlay(in rect: CGRect) {
@@ -346,7 +416,12 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
 
         switch model.tool {
         case .select:
-            if let hit = model.annotation(at: point, slop: 6 / zoom) {
+            if let id = model.selectedID,
+               let selected = model.annotations.first(where: { $0.id == id }),
+               let grabbed = resize(of: selected, at: point) {
+                resizing = grabbed
+                didCheckpointResize = false
+            } else if let hit = model.annotation(at: point, slop: 6 / zoom) {
                 model.selectedID = hit.id
                 movingID = hit.id
                 lastMovePoint = point
@@ -381,6 +456,25 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     override func mouseDragged(with event: NSEvent) {
         var point = imagePoint(for: event)
         let shift = event.modifierFlags.contains(.shift)
+
+        if let resizing {
+            if !didCheckpointResize {
+                model.checkpoint()
+                didCheckpointResize = true
+            }
+            var target = resizing.clampToImage ? clamp(point) : point
+            if shift {
+                target = resizing.lineLike
+                    ? Geometry.snapAngle(from: resizing.anchor, to: target)
+                    : Geometry.snapSquare(from: resizing.anchor, to: target)
+            }
+            if resizing.movesStart {
+                model.reshape(resizing.id, start: target, end: resizing.anchor)
+            } else {
+                model.reshape(resizing.id, start: resizing.anchor, end: target)
+            }
+            return
+        }
 
         if let movingID, let last = lastMovePoint {
             if !didCheckpointMove {
@@ -432,6 +526,11 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         if movingID != nil {
             movingID = nil
             lastMovePoint = nil
+            return
+        }
+
+        if resizing != nil {
+            resizing = nil
             return
         }
 
