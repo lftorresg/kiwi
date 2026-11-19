@@ -42,6 +42,7 @@ final class EditorCoordinator {
 /// Commands the editor window can receive from the keyboard or its buttons.
 enum EditorCommand {
     case copy, save, saveAs, delete, done, undo, redo, close, autoRedact
+    case export(ImageFormat)
 }
 
 /// Window that turns Command-key shortcuts into editor commands.
@@ -106,7 +107,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         let visible = (NSScreen.underMouse ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let natural = capture.pointSize
-        let width = min(max(natural.width + 72, 860), visible.width * 0.9)
+        let width = min(max(natural.width + 72, 980), visible.width * 0.9)
         let height = min(max(natural.height + 156, 560), visible.height * 0.9)
         let frame = NSRect(
             x: visible.midX - width / 2,
@@ -127,7 +128,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.backgroundColor = .underPageBackgroundColor
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 860, height: 520)
+        window.contentMinSize = NSSize(width: 980, height: 520)
         window.delegate = self
         window.onCommand = { [weak self] command in self?.perform(command) }
 
@@ -204,6 +205,35 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             window.close()
         case .autoRedact:
             autoRedact()
+        case .export(let format):
+            export(as: format)
+        }
+    }
+
+    /// Writes the edited image to the screenshots folder in another format.
+    private func export(as format: ImageFormat) {
+        applyEdits()
+        let image = capture.image
+        let scale = capture.scale
+        let name = capture.name
+        let folder = Prefs.shared.saveFolderURL
+        let quality = Prefs.shared.convertQuality
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let outcome: Result<URL, Error> = Result {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let url = CaptureStore.uniqueURL(in: folder, name: name, ext: format.fileExtension)
+                try ImageEngine.write(image, format: format, to: url, quality: quality, scale: scale)
+                return url
+            }
+            Task { @MainActor in
+                switch outcome {
+                case .success(let url):
+                    Toast.show("Saved \(url.lastPathComponent)", symbol: "square.and.arrow.down.fill")
+                case .failure(let error):
+                    Toast.error(error.localizedDescription)
+                }
+            }
         }
     }
 
@@ -443,6 +473,17 @@ private struct EditorRootView: View {
             }
             .buttonStyle(.glass)
             .help("Save to your screenshots folder (⌘S). ⇧⌘S to choose a location.")
+
+            Menu {
+                ForEach(ImageFormat.allCases, id: \.self) { format in
+                    Button("Save as \(format.title)") { perform(.export(format)) }
+                }
+            } label: {
+                Label("Convert", systemImage: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.glass)
+            .fixedSize()
+            .help("Save the edited image to your screenshots folder in another format")
 
             Button { perform(.copy) } label: {
                 Label("Copy", systemImage: "doc.on.doc")

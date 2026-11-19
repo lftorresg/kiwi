@@ -98,6 +98,7 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles.
 | Return | Copy the result and close |
 | ⌘R | Auto-redact |
 | ⌘C / ⌘S / ⇧⌘S | Copy / Save / Save As |
+| Convert menu | Save the edited image as PNG, JPEG, HEIC, AVIF, TIFF or PDF |
 | ⌘Z / ⇧⌘Z | Undo / Redo |
 | ⌫ | Delete the selected annotation |
 | ⌘⌫ | Delete the screenshot |
