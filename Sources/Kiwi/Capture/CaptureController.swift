@@ -291,6 +291,17 @@ final class CaptureController {
         }
     }
 
+    /// Called when the editor window is closed with edits that were never
+    /// copied or saved. The edited image replaces the original in the cache,
+    /// on the clipboard (when captures are copied automatically) and in the
+    /// saved file if there is one.
+    func keepEdits(_ capture: Capture) {
+        let copy = Prefs.shared.copyOnCapture
+        persist(capture, copy: copy, save: capture.savedURL != nil) { _ in
+            Toast.show(copy ? "Edited image copied" : "Edits kept", symbol: "checkmark.circle.fill")
+        }
+    }
+
     func edit(_ capture: Capture) {
         PreviewHUD.shared.dismiss()
         EditorCoordinator.shared.open(capture)
