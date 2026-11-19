@@ -164,6 +164,10 @@ struct SettingsView: View {
 
     private var recordingSection: some View {
         Section("Recording") {
+            Toggle("Record in HEVC", isOn: $prefs.recordHEVC)
+            Text("HEVC is sharper at a smaller size. Turn it off for H.264, which plays in more apps and on older devices.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
             Toggle("Record system audio", isOn: $prefs.recordSystemAudio)
             Text("Recordings are saved as MP4 in the same folder as screenshots. Stop from the menu bar or with ⇧⌘5.")
                 .font(.callout)
