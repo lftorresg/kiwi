@@ -186,7 +186,12 @@ final class CaptureController {
         let prefs = Prefs.shared
         let capture = Capture(image: image, scale: scale)
         last = capture
-        PreviewHUD.shared.show(capture, on: screen)
+        if prefs.editAfterCapture {
+            PreviewHUD.shared.dismiss(animated: false)
+            EditorCoordinator.shared.open(capture)
+        } else {
+            PreviewHUD.shared.show(capture, on: screen)
+        }
 
         switch redaction {
         case .off:

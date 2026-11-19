@@ -122,6 +122,7 @@ struct SettingsView: View {
 
     private var screenshotsSection: some View {
         Section("Screenshots") {
+            Toggle("Open the editor right after a capture", isOn: $prefs.editAfterCapture)
             Toggle("Copy to clipboard after capture", isOn: $prefs.copyOnCapture)
             Toggle("Also save every capture to a folder", isOn: $prefs.saveOnCapture)
             LabeledContent("Save folder") {
@@ -135,7 +136,7 @@ struct SettingsView: View {
             }
             Toggle("Play shutter sound", isOn: $prefs.playSound)
             Toggle("Show pointer in full-screen captures", isOn: $prefs.showCursor)
-            LabeledContent("Keep preview for") {
+            LabeledContent("Keep corner preview for") {
                 Picker("", selection: $prefs.previewSeconds) {
                     Text("4 seconds").tag(4.0)
                     Text("6 seconds").tag(6.0)

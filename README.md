@@ -12,7 +12,7 @@
 
 Kiwi lives in the menu bar.
 
-**Capture.** Press ⇧⌘4, drag, and the image is on your clipboard. A glass preview floats in the corner with Copy, Edit, Save and Delete, and you can drag it into any app.
+**Capture.** Press ⇧⌘4, drag, and the image is on your clipboard with the editor open, ready to mark up. Prefer to stay out of the way? Switch to a glass preview in the corner with Copy, Edit, Save and Delete.
 
 **Redact.** One click finds emails, phone numbers, card numbers, IDs, keys and tokens, and addresses, and covers them with solid boxes. Kiwi can do it automatically before a capture ever reaches the clipboard.
 
@@ -57,7 +57,7 @@ Kiwi opens a short setup guide:
 ## After a capture
 
 - The image is copied to the clipboard immediately (configurable).
-- The preview stays for a few seconds and pauses while the pointer is over it.
+- The editor opens straight away. Turn off *Open the editor right after a capture* in Settings to get a corner preview instead; it stays for a few seconds and pauses while the pointer is over it.
 - **Copy**, **Edit**, **Save**, **Delete** act on the capture. Delete removes the working copy, moves any saved copy to the Trash, and clears the clipboard if it still holds that image.
 - Drag the thumbnail into Slack, Mail, Finder, or anywhere that accepts a PNG.
 - Saved captures and recordings go to `~/Pictures/Kiwi` unless you choose another folder.

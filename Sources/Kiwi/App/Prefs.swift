@@ -20,6 +20,7 @@ final class Prefs: ObservableObject {
         static let redactCategories = "redactCategories"
         static let convertQuality = "convertQuality"
         static let recordSystemAudio = "recordSystemAudio"
+        static let editAfterCapture = "editAfterCapture"
     }
 
     @Published var copyOnCapture: Bool {
@@ -68,6 +69,11 @@ final class Prefs: ObservableObject {
         didSet { UserDefaults.standard.set(recordSystemAudio, forKey: Key.recordSystemAudio) }
     }
 
+    /// Open the editor straight after a capture instead of showing the corner preview.
+    @Published var editAfterCapture: Bool {
+        didSet { UserDefaults.standard.set(editAfterCapture, forKey: Key.editAfterCapture) }
+    }
+
     var saveFolderURL: URL { URL(fileURLWithPath: saveFolder, isDirectory: true) }
 
     var redactOptions: PIIScanner.Options {
@@ -95,6 +101,7 @@ final class Prefs: ObservableObject {
             Key.redactCategories: allCategories,
             Key.convertQuality: 0.9,
             Key.recordSystemAudio: false,
+            Key.editAfterCapture: true,
         ])
 
         copyOnCapture = defaults.bool(forKey: Key.copyOnCapture)
@@ -112,5 +119,6 @@ final class Prefs: ObservableObject {
         let quality = defaults.double(forKey: Key.convertQuality)
         convertQuality = min(1, max(0.5, quality == 0 ? 0.9 : quality))
         recordSystemAudio = defaults.bool(forKey: Key.recordSystemAudio)
+        editAfterCapture = defaults.bool(forKey: Key.editAfterCapture)
     }
 }
