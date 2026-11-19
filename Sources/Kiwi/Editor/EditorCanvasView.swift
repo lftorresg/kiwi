@@ -221,10 +221,8 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         }
         let factor = currentFactor
         let limit = panLimit(for: factor)
-        guard limit.width > 0 || limit.height > 0 else {
-            super.scrollWheel(with: event)
-            return
-        }
+        // Nothing to pan when the whole image is visible.
+        guard limit.width > 0 || limit.height > 0 else { return }
         commitText()
         let step: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
         let moved = CGPoint(
