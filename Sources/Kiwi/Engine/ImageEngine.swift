@@ -176,6 +176,19 @@ enum ImageEngine {
         return destination
     }
 
+    /// Encodes an in-memory image, for the editor's Convert menu. The file is
+    /// readable by its owner only, like every capture Kiwi writes.
+    static func write(_ image: CGImage, format: ImageFormat, to url: URL, quality: Double, scale: CGFloat) throws {
+        let destination = try makeDestination(url, format: format)
+        var options = destinationOptions(format: format, quality: quality)
+        let dpi = 72.0 * Double(max(1, scale))
+        options[kCGImagePropertyDPIWidth] = dpi
+        options[kCGImagePropertyDPIHeight] = dpi
+        CGImageDestinationAddImage(destination, image, options as CFDictionary)
+        try finalize(destination, at: url)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
     /// Re-encodes the image in another format, keeping its metadata.
     @discardableResult
     static func convert(_ url: URL, to format: ImageFormat, quality: Double = 0.9) throws -> URL {
