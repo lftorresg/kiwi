@@ -15,6 +15,8 @@ final class EditorModel: ObservableObject {
     @Published var selectedID: UUID?
     @Published private(set) var base: CGImage
     @Published private(set) var annotations: [Annotation] = []
+    /// Current zoom of the canvas, for the toolbar readout.
+    @Published var zoomPercent = 100
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
 

@@ -100,6 +100,7 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles.
 | ⌘C / ⌘S / ⇧⌘S | Copy / Save / Save As |
 | Convert menu | Save the edited image as PNG, JPEG, HEIC, AVIF, TIFF or PDF |
 | ⌘Z / ⇧⌘Z | Undo / Redo |
+| ⌘+ / ⌘− / ⌘0 / ⌘1 | Zoom in / out / fit / actual size. Pinch or ⌘-scroll also zooms; scroll pans. |
 | ⌫ | Delete the selected annotation |
 | ⌘⌫ | Delete the screenshot |
 
