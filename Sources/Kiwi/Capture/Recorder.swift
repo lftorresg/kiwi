@@ -2,7 +2,7 @@ import AppKit
 import AVFoundation
 import ScreenCaptureKit
 
-/// Records a display, or part of one, straight to an MP4 file using
+/// Records a display, or part of one, straight to an MP4 file (HEVC by default) using
 /// ScreenCaptureKit's own recording output. No frames pass through Kiwi.
 @MainActor
 final class RecordingController: NSObject, SCRecordingOutputDelegate {
@@ -36,6 +36,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
             borderPanel = border
         }
         let systemAudio = Prefs.shared.recordSystemAudio
+        let useHEVC = Prefs.shared.recordHEVC
         let folder = Prefs.shared.saveFolderURL
 
         Task { @MainActor in
@@ -64,7 +65,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
                 let recordingConfiguration = SCRecordingOutputConfiguration()
                 recordingConfiguration.outputURL = url
                 recordingConfiguration.outputFileType = .mp4
-                recordingConfiguration.videoCodecType = .h264
+                recordingConfiguration.videoCodecType = useHEVC ? .hevc : .h264
 
                 let stream = SCStream(filter: setup.filter, configuration: configuration, delegate: nil)
                 let output = SCRecordingOutput(configuration: recordingConfiguration, delegate: self)

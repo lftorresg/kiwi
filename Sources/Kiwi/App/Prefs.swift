@@ -21,6 +21,7 @@ final class Prefs: ObservableObject {
         static let convertQuality = "convertQuality"
         static let recordSystemAudio = "recordSystemAudio"
         static let editAfterCapture = "editAfterCapture"
+        static let recordHEVC = "recordHEVC"
     }
 
     @Published var copyOnCapture: Bool {
@@ -69,6 +70,11 @@ final class Prefs: ObservableObject {
         didSet { UserDefaults.standard.set(recordSystemAudio, forKey: Key.recordSystemAudio) }
     }
 
+    /// Record in HEVC (sharper and smaller) instead of H.264 (plays in more places).
+    @Published var recordHEVC: Bool {
+        didSet { UserDefaults.standard.set(recordHEVC, forKey: Key.recordHEVC) }
+    }
+
     /// Open the editor straight after a capture instead of showing the corner preview.
     @Published var editAfterCapture: Bool {
         didSet { UserDefaults.standard.set(editAfterCapture, forKey: Key.editAfterCapture) }
@@ -102,6 +108,7 @@ final class Prefs: ObservableObject {
             Key.convertQuality: 0.9,
             Key.recordSystemAudio: false,
             Key.editAfterCapture: true,
+            Key.recordHEVC: true,
         ])
 
         copyOnCapture = defaults.bool(forKey: Key.copyOnCapture)
@@ -120,5 +127,6 @@ final class Prefs: ObservableObject {
         convertQuality = min(1, max(0.5, quality == 0 ? 0.9 : quality))
         recordSystemAudio = defaults.bool(forKey: Key.recordSystemAudio)
         editAfterCapture = defaults.bool(forKey: Key.editAfterCapture)
+        recordHEVC = defaults.bool(forKey: Key.recordHEVC)
     }
 }

@@ -78,7 +78,7 @@ Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches ea
 
 ## Recording
 
-Recordings are H.264 MP4 at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. System audio is optional and off by default. Kiwi does not use the microphone. The red outline and Kiwi's own windows never appear in the video.
+Recordings are MP4 at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio is optional and off by default. Kiwi does not use the microphone. The red outline and Kiwi's own windows never appear in the video.
 
 ## Editor
 
