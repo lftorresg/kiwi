@@ -123,6 +123,16 @@ final class EditorModel: ObservableObject {
         }
     }
 
+    /// Moves an annotation's two defining points, for resize handles.
+    func reshape(_ id: UUID, start: CGPoint, end: CGPoint) {
+        guard let index = annotations.firstIndex(where: { $0.id == id }) else { return }
+        annotations[index].start = start
+        annotations[index].end = end
+        if annotations[index].kind == .pixelate {
+            annotations[index].patch = pixelPatch(for: annotations[index].rect)
+        }
+    }
+
     func removeSelected() {
         guard let id = selectedID, annotations.contains(where: { $0.id == id }) else { return }
         checkpoint()
