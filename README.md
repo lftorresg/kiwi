@@ -102,6 +102,8 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles.
 | ⌫ | Delete the selected annotation |
 | ⌘⌫ | Delete the screenshot |
 
+Closing the editor window keeps your edits: the edited image replaces the copy on the clipboard. To throw the capture away, use Delete. A file is written to your screenshots folder only when you press Save, export, or have *Also save every capture* on.
+
 ## The wheel
 
 While dragging one or more files:

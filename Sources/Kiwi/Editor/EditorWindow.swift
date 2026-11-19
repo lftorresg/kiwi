@@ -93,6 +93,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     private let canvas: EditorCanvasView
     private let window: EditorWindow
     private var isScanning = false
+    /// True once Done or Delete has decided what happens to the capture.
+    private var isSettled = false
 
     init(capture: Capture) {
         let editorModel = EditorModel(image: capture.image, scale: capture.scale)
@@ -151,6 +153,17 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        // Closing the window keeps the edits: the edited image replaces the
+        // original wherever it already went (clipboard, saved file), so a
+        // redacted capture never leaves its unredacted original behind.
+        if !isSettled {
+            isSettled = true
+            canvas.commitText()
+            if model.hasEdits {
+                applyEdits()
+                CaptureController.shared.keepEdits(capture)
+            }
+        }
         // Release the controller only after AppKit has finished closing the window.
         let handler = onClose
         after(0.3) {
@@ -176,10 +189,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         case .saveAs:
             saveAs()
         case .done:
+            isSettled = true
             applyEdits()
             CaptureController.shared.finishEditing(capture)
             window.close()
         case .delete:
+            isSettled = true
             // A file opened from disk is only closed; Kiwi never deletes originals.
             if capture.isScreenshot {
                 CaptureController.shared.delete(capture)

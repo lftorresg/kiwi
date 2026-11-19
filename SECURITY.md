@@ -36,6 +36,7 @@ Kiwi can see your screen, so it is built to hold as little power as possible and
 - Auto-redact reads text on-device with Apple's Vision framework and matches it against patterns for emails, phone numbers, payment cards (Luhn-checked), CPF and SSN, credentials and tokens, and IP/MAC addresses. Faces are optional.
 - Redactions are **solid fills** burned into the exported pixels. Blur and pixelation can be partially reversed; solid fills cannot.
 - With *Redact every capture* on, the scan runs before the image reaches the clipboard or disk. If the scan fails, Kiwi fails closed: nothing is copied or saved automatically.
+- Closing the editor applies your edits to the clipboard copy, so the unredacted original is not left behind there.
 - Detection is best effort. Text recognition can misread characters, and a secret in an unusual format will not match a pattern. Always look at the result before sharing.
 - The Pixelate tool is cosmetic. Use Redact for anything sensitive.
 
