@@ -41,8 +41,8 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    self.needsDisplay = true
-                    self.hostWindow?.invalidateCursorRects(for: self)
+                    // Also refreshes the zoom readout, which changes when a crop resizes the image.
+                    self.viewChanged()
                 }
             }
         }
