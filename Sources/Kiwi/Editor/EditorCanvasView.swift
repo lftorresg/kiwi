@@ -30,6 +30,11 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     }
     private var resizing: Resize?
     private var didCheckpointResize = false
+
+    /// A drag that moves the image itself: where it started (view points) and the pan at that moment.
+    private var panDrag: (start: CGPoint, origin: CGPoint)?
+    /// True while Space is held, which turns any tool into a temporary hand.
+    private var spaceHeld = false
     private var textField: NSTextField?
     private var textOrigin: CGPoint = .zero
     private var subscription: AnyCancellable?
@@ -266,6 +271,10 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     }
 
     override func resetCursorRects() {
+        if spaceHeld || panDrag != nil {
+            addCursorRect(bounds, cursor: panDrag != nil ? .closedHand : .openHand)
+            return
+        }
         let cursor: NSCursor
         switch model.tool {
         case .select: cursor = .arrow
@@ -273,6 +282,46 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         default: cursor = .crosshair
         }
         addCursorRect(imageRect, cursor: cursor)
+    }
+
+    // MARK: Dragging the image
+
+    private func beginPan(with event: NSEvent) {
+        let start = convert(event.locationInWindow, from: nil)
+        panDrag = (start, clampedPan(pan, factor: currentFactor))
+        NSCursor.closedHand.set()
+        hostWindow?.invalidateCursorRects(for: self)
+    }
+
+    private func continuePan(with event: NSEvent) {
+        guard let drag = panDrag else { return }
+        let point = convert(event.locationInWindow, from: nil)
+        let moved = CGPoint(
+            x: drag.origin.x + point.x - drag.start.x,
+            y: drag.origin.y + point.y - drag.start.y
+        )
+        pan = clampedPan(moved, factor: currentFactor)
+        needsDisplay = true
+    }
+
+    private func endPan() {
+        panDrag = nil
+        hostWindow?.invalidateCursorRects(for: self)
+    }
+
+    override func keyUp(with event: NSEvent) {
+        if event.keyCode == 49, spaceHeld {
+            spaceHeld = false
+            hostWindow?.invalidateCursorRects(for: self)
+            return
+        }
+        super.keyUp(with: event)
+    }
+
+    override func resignFirstResponder() -> Bool {
+        // Never leave the hand stuck on if focus moves while Space is down.
+        spaceHeld = false
+        return super.resignFirstResponder()
     }
 
     // MARK: Drawing
@@ -410,6 +459,11 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         hostWindow?.makeFirstResponder(self)
         commitText()
 
+        if spaceHeld {
+            beginPan(with: event)
+            return
+        }
+
         let point = imagePoint(for: event)
         let inside = model.pixelBounds.contains(point)
 
@@ -426,7 +480,9 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
                 lastMovePoint = point
                 didCheckpointMove = false
             } else {
+                // Empty space: drop the selection and drag the image instead.
                 model.selectedID = nil
+                beginPan(with: event)
             }
 
         case .text:
@@ -453,6 +509,10 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if panDrag != nil {
+            continuePan(with: event)
+            return
+        }
         var point = imagePoint(for: event)
         let shift = event.modifierFlags.contains(.shift)
 
@@ -522,6 +582,11 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     override func mouseUp(with event: NSEvent) {
         defer { needsDisplay = true }
 
+        if panDrag != nil {
+            endPan()
+            return
+        }
+
         if movingID != nil {
             movingID = nil
             lastMovePoint = nil
@@ -571,6 +636,11 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         }
 
         switch event.keyCode {
+        case 49: // space: hold to drag the image with any tool
+            if !spaceHeld {
+                spaceHeld = true
+                hostWindow?.invalidateCursorRects(for: self)
+            }
         case 51, 117: // delete, forward delete
             model.removeSelected()
         case 53: // escape

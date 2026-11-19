@@ -25,7 +25,7 @@ enum Tool: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .select: return "Select"
+        case .select: return "Select, move, or drag the image"
         case .arrow: return "Arrow"
         case .line: return "Line"
         case .rect: return "Rectangle"
