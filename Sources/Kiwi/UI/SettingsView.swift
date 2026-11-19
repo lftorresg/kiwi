@@ -28,6 +28,26 @@ enum SystemLinks {
     }
 }
 
+/// Live system state for the settings and setup windows.
+///
+/// A plain ObservableObject rather than `@State`: in current SDKs `@State` is a
+/// macro whose plugin ships only with Xcode, and Kiwi should build with the
+/// Command Line Tools alone.
+@MainActor
+final class SystemStatus: ObservableObject {
+    @Published var launchAtLogin: Bool
+    @Published var hasPermission: Bool
+
+    init() {
+        launchAtLogin = (SMAppService.mainApp.status == .enabled)
+        hasPermission = ScreenGrabber.hasPermission
+    }
+
+    func refresh() {
+        hasPermission = ScreenGrabber.hasPermission
+    }
+}
+
 /// Owns the Settings and Setup windows.
 @MainActor
 final class WindowRouter: NSObject, NSWindowDelegate {
@@ -35,13 +55,14 @@ final class WindowRouter: NSObject, NSWindowDelegate {
 
     private var settingsWindow: NSWindow?
     private var setupWindow: NSWindow?
+    private let status = SystemStatus()
 
     func showSettings() {
         if settingsWindow == nil {
             settingsWindow = makeWindow(
                 title: "Kiwi Settings",
                 size: NSSize(width: 500, height: 680),
-                content: SettingsView(prefs: Prefs.shared)
+                content: SettingsView(prefs: Prefs.shared, status: status)
             )
         }
         present(settingsWindow)
@@ -52,7 +73,7 @@ final class WindowRouter: NSObject, NSWindowDelegate {
             setupWindow = makeWindow(
                 title: "Welcome to Kiwi",
                 size: NSSize(width: 520, height: 600),
-                content: SetupView()
+                content: SetupView(status: status)
             )
         }
         present(setupWindow)
@@ -84,8 +105,7 @@ final class WindowRouter: NSObject, NSWindowDelegate {
 
 struct SettingsView: View {
     @ObservedObject var prefs: Prefs
-    @State private var launchAtLogin = (SMAppService.mainApp.status == .enabled)
-    @State private var hasPermission = ScreenGrabber.hasPermission
+    @ObservedObject var status: SystemStatus
 
     var body: some View {
         Form {
@@ -97,7 +117,7 @@ struct SettingsView: View {
             systemSection
         }
         .formStyle(.grouped)
-        .onAppear { hasPermission = ScreenGrabber.hasPermission }
+        .onAppear { status.refresh() }
     }
 
     private var screenshotsSection: some View {
@@ -188,15 +208,15 @@ struct SettingsView: View {
 
     private var systemSection: some View {
         Section("System") {
-            Toggle("Open Kiwi at login", isOn: $launchAtLogin)
-                .onChange(of: launchAtLogin) { _, enabled in
+            Toggle("Open Kiwi at login", isOn: $status.launchAtLogin)
+                .onChange(of: status.launchAtLogin) { _, enabled in
                     setLaunchAtLogin(enabled)
                 }
             LabeledContent("Screen Recording") {
                 HStack(spacing: 8) {
-                    Text(hasPermission ? "Allowed" : "Not allowed")
-                        .foregroundStyle(hasPermission ? Color.secondary : Color.orange)
-                    if !hasPermission {
+                    Text(status.hasPermission ? "Allowed" : "Not allowed")
+                        .foregroundStyle(status.hasPermission ? Color.secondary : Color.orange)
+                    if !status.hasPermission {
                         Button("Open Settings…") { SystemLinks.openScreenRecordingSettings() }
                     }
                 }
@@ -256,7 +276,7 @@ struct SettingsView: View {
 // MARK: - Setup guide
 
 struct SetupView: View {
-    @State private var hasPermission = ScreenGrabber.hasPermission
+    @ObservedObject var status: SystemStatus
 
     var body: some View {
         VStack(spacing: 0) {
@@ -276,13 +296,13 @@ struct SetupView: View {
                 VStack(spacing: 12) {
                     step(
                         number: 1,
-                        done: hasPermission,
+                        done: status.hasPermission,
                         title: "Allow Screen Recording",
-                        detail: hasPermission
+                        detail: status.hasPermission
                             ? "Done. Kiwi can capture your screen."
                             : "Kiwi needs this to take screenshots. Switch Kiwi on in the list, then relaunch."
                     ) {
-                        if !hasPermission {
+                        if !status.hasPermission {
                             Button("Open Settings") {
                                 ScreenGrabber.requestPermission()
                                 SystemLinks.openScreenRecordingSettings()
@@ -324,9 +344,9 @@ struct SetupView: View {
             .padding(.bottom, 26)
         }
         .frame(minWidth: 520, minHeight: 600)
-        .onAppear { hasPermission = ScreenGrabber.hasPermission }
+        .onAppear { status.refresh() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            hasPermission = ScreenGrabber.hasPermission
+            status.refresh()
         }
     }
 

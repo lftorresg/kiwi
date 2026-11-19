@@ -25,7 +25,7 @@ Everything runs on your Mac. Kiwi makes no network connections. See [SECURITY.md
 ## Requirements
 
 - macOS 26 (Tahoe) or later
-- Xcode 26 or the Xcode 26 Command Line Tools (Swift 6.2) to build
+- Swift 6.2 or later to build. The Command Line Tools are enough; Xcode is not required.
 
 ## Build and run
 
