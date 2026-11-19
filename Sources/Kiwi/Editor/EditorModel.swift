@@ -9,7 +9,7 @@ final class EditorModel: ObservableObject {
         let annotations: [Annotation]
     }
 
-    @Published var tool: Tool = .arrow
+    @Published var tool: Tool = .pen
     @Published var colorIndex = 0
     @Published var weight: Weight = .medium
     @Published var selectedID: UUID?
