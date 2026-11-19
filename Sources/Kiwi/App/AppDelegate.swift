@@ -78,6 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyIdleAppearance()
 
         let menu = NSMenu()
+        let about = NSMenuItem(title: "Kiwi \(BuildInfo.label)", action: nil, keyEquivalent: "")
+        about.isEnabled = false
+        menu.addItem(about)
+        menu.addItem(.separator())
         menu.addItem(menuItem("Capture Area", #selector(captureArea), key: "4", symbol: "viewfinder"))
         menu.addItem(menuItem("Capture Window", #selector(captureWindow), symbol: "macwindow"))
         menu.addItem(menuItem("Capture Screen", #selector(captureScreen), key: "3", symbol: "display"))
