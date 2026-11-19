@@ -302,6 +302,33 @@ final class CaptureController {
         }
     }
 
+    /// Renames a capture: its working copy and, if it was saved, the saved file.
+    /// Returns the name actually applied (unchanged when the proposal is empty).
+    @discardableResult
+    func rename(_ capture: Capture, to proposed: String) -> String {
+        let name = CaptureStore.sanitizedName(proposed)
+        guard !name.isEmpty, name != capture.name else { return capture.name }
+        let fm = FileManager.default
+
+        let newCache = CaptureStore.cacheDirectory.appendingPathComponent(name + ".png")
+        if fm.fileExists(atPath: capture.cacheURL.path) {
+            try? fm.removeItem(at: newCache)
+            try? fm.moveItem(at: capture.cacheURL, to: newCache)
+        }
+        capture.cacheURL = newCache
+
+        if let saved = capture.savedURL, fm.fileExists(atPath: saved.path) {
+            let target = CaptureStore.uniqueURL(
+                in: saved.deletingLastPathComponent(), name: name, ext: saved.pathExtension
+            )
+            if (try? fm.moveItem(at: saved, to: target)) != nil {
+                capture.savedURL = target
+            }
+        }
+        capture.name = name
+        return name
+    }
+
     func edit(_ capture: Capture) {
         PreviewHUD.shared.dismiss()
         EditorCoordinator.shared.open(capture)

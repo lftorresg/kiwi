@@ -91,7 +91,7 @@ final class EditorWindow: NSWindow {
 }
 
 @MainActor
-final class EditorWindowController: NSObject, NSWindowDelegate {
+final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate {
     let capture: Capture
     var onClose: (() -> Void)?
 
@@ -99,6 +99,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     private let canvas: EditorCanvasView
     private let window: EditorWindow
     private var isScanning = false
+    /// Editable capture name, shown in the title bar next to the window buttons.
+    private let nameField = NSTextField()
     /// True once Done or Delete has decided what happens to the capture.
     private var isSettled = false
 
@@ -130,7 +132,9 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         super.init()
 
         window.title = capture.name
+        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        installNameField()
         window.backgroundColor = .underPageBackgroundColor
         window.isReleasedWhenClosed = false
         window.contentMinSize = NSSize(width: 980, height: 520)
@@ -148,6 +152,58 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.setFrame(frame, display: false)
     }
 
+    /// Puts an editable name where the window title would be. The name is used
+    /// for Save, Convert, Save As and drag-out.
+    private func installNameField() {
+        nameField.stringValue = capture.name
+        nameField.isBordered = false
+        nameField.isBezeled = false
+        nameField.drawsBackground = false
+        nameField.isEditable = true
+        nameField.focusRingType = .none
+        nameField.font = .systemFont(ofSize: 13, weight: .semibold)
+        nameField.lineBreakMode = .byTruncatingMiddle
+        nameField.usesSingleLineMode = true
+        nameField.placeholderString = "Name this capture"
+        nameField.toolTip = "Click to rename"
+        nameField.delegate = self
+        nameField.translatesAutoresizingMaskIntoConstraints = false
+
+        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 28))
+        holder.addSubview(nameField)
+        NSLayoutConstraint.activate([
+            nameField.leadingAnchor.constraint(equalTo: holder.leadingAnchor, constant: 8),
+            nameField.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
+            nameField.centerYAnchor.constraint(equalTo: holder.centerYAnchor),
+        ])
+
+        let accessory = NSTitlebarAccessoryViewController()
+        accessory.view = holder
+        accessory.layoutAttribute = .leading
+        window.addTitlebarAccessoryViewController(accessory)
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) {
+        guard (notification.object as? NSTextField) === nameField else { return }
+        let applied = CaptureController.shared.rename(capture, to: nameField.stringValue)
+        nameField.stringValue = applied
+        window.title = applied
+        // After Return nothing has focus; hand it back to the canvas so tool keys work.
+        after(0) { [weak self] in
+            guard let self else { return }
+            if self.window.firstResponder === self.window {
+                self.window.makeFirstResponder(self.canvas)
+            }
+        }
+    }
+
+    /// Applies a name that is still being typed, before anything uses it.
+    private func commitName() {
+        if nameField.currentEditor() != nil {
+            window.makeFirstResponder(canvas)
+        }
+    }
+
     func show() {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -162,6 +218,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         // Closing the window keeps the edits: the edited image replaces the
         // original wherever it already went (clipboard, saved file), so a
         // redacted capture never leaves its unredacted original behind.
+        commitName()
         if !isSettled {
             isSettled = true
             canvas.commitText()
@@ -180,6 +237,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     // MARK: Commands
 
     private func perform(_ command: EditorCommand) {
+        commitName()
         canvas.commitText()
         switch command {
         case .undo:
