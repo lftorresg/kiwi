@@ -43,6 +43,7 @@ final class EditorCoordinator {
 enum EditorCommand {
     case copy, save, saveAs, delete, done, undo, redo, close, autoRedact
     case export(ImageFormat)
+    case zoomIn, zoomOut, zoomFit, zoomActual
 }
 
 /// Window that turns Command-key shortcuts into editor commands.
@@ -75,6 +76,10 @@ final class EditorWindow: NSWindow {
         case ("z", true): command = .redo
         case ("w", false): command = .close
         case ("r", false): command = .autoRedact
+        case ("=", false), ("+", true), ("+", false): command = .zoomIn
+        case ("-", false): command = .zoomOut
+        case ("0", false): command = .zoomFit
+        case ("1", false): command = .zoomActual
         default: command = nil
         }
         if let command {
@@ -207,6 +212,14 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             autoRedact()
         case .export(let format):
             export(as: format)
+        case .zoomIn:
+            canvas.zoomIn()
+        case .zoomOut:
+            canvas.zoomOut()
+        case .zoomFit:
+            canvas.zoomToFit()
+        case .zoomActual:
+            canvas.zoomToActualSize()
         }
     }
 
@@ -394,10 +407,47 @@ private struct EditorRootView: View {
             }
             .buttonStyle(.plain)
             .help("Find and cover emails, phone numbers, cards, IDs, keys and addresses (⌘R)")
+
+            Divider()
+                .frame(height: 18)
+                .padding(.horizontal, 6)
+
+            zoomControls
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .glassEffect(.regular, in: .capsule)
+    }
+
+    private var zoomControls: some View {
+        HStack(spacing: 0) {
+            Button { perform(.zoomOut) } label: {
+                Image(systemName: "minus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 24, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Zoom out (⌘−)")
+
+            Button { perform(.zoomFit) } label: {
+                Text("\(model.zoomPercent)%")
+                    .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+                    .frame(width: 44, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Fit to window (⌘0). ⌘1 shows actual size. Pinch or ⌘-scroll to zoom.")
+
+            Button { perform(.zoomIn) } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 24, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Zoom in (⌘+)")
+        }
     }
 
     // Colour and thickness, bottom left.

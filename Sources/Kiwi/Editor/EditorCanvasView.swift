@@ -1,8 +1,8 @@
 import AppKit
 import Combine
 
-/// The drawing surface of the editor. Shows the image fitted to the window and
-/// turns mouse and keyboard input into annotations.
+/// The drawing surface of the editor. Shows the image fitted to the window (or
+/// zoomed and panned) and turns mouse and keyboard input into annotations.
 final class EditorCanvasView: NSView, NSTextFieldDelegate {
     let model: EditorModel
 
@@ -52,34 +52,176 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        needsDisplay = true
-        hostWindow?.invalidateCursorRects(for: self)
+        chooseInitialViewIfNeeded()
+        viewChanged()
     }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     // MARK: Geometry
 
-    /// Where the image sits inside the view, in view points.
-    var imageRect: CGRect {
-        let available = CGRect(
+    /// Explicit zoom as a fraction of actual size (1 = 100%). Nil means "fit the window".
+    private var zoomFactor: CGFloat?
+    /// How far the image centre is pushed from the viewport centre, in view points.
+    private var pan = CGPoint.zero
+    private var didChooseInitialView = false
+
+    /// The part of the view not covered by the floating toolbars.
+    private var viewport: CGRect {
+        CGRect(
             x: insets.left,
             y: insets.top,
             width: max(1, bounds.width - insets.left - insets.right),
             height: max(1, bounds.height - insets.top - insets.bottom)
         )
-        let natural = CGSize(
-            width: model.pixelSize.width / model.scale,
-            height: model.pixelSize.height / model.scale
+    }
+
+    /// Image size in points at 100%.
+    private var naturalSize: CGSize {
+        CGSize(width: model.pixelSize.width / model.scale, height: model.pixelSize.height / model.scale)
+    }
+
+    private var fitFactor: CGFloat {
+        let natural = naturalSize
+        guard natural.width > 0, natural.height > 0 else { return 1 }
+        let area = viewport
+        return min(1, area.width / natural.width, area.height / natural.height)
+    }
+
+    private var currentFactor: CGFloat { zoomFactor ?? fitFactor }
+
+    /// Largest pan in each direction that still keeps an image edge at the viewport edge.
+    private func panLimit(for factor: CGFloat) -> CGSize {
+        let natural = naturalSize
+        let area = viewport
+        return CGSize(
+            width: max(0, (natural.width * factor - area.width) / 2),
+            height: max(0, (natural.height * factor - area.height) / 2)
         )
-        guard natural.width > 0, natural.height > 0 else { return available }
-        let fit = min(1, available.width / natural.width, available.height / natural.height)
-        let size = CGSize(width: natural.width * fit, height: natural.height * fit)
+    }
+
+    private func clampedPan(_ value: CGPoint, factor: CGFloat) -> CGPoint {
+        let limit = panLimit(for: factor)
+        return CGPoint(
+            x: min(max(value.x, -limit.width), limit.width),
+            y: min(max(value.y, -limit.height), limit.height)
+        )
+    }
+
+    /// Where the image sits inside the view, in view points.
+    var imageRect: CGRect {
+        let natural = naturalSize
+        let area = viewport
+        guard natural.width > 0, natural.height > 0 else { return area }
+        let factor = currentFactor
+        let size = CGSize(width: natural.width * factor, height: natural.height * factor)
+        let offset = clampedPan(pan, factor: factor)
         return CGRect(
-            x: (available.midX - size.width / 2).rounded(),
-            y: (available.midY - size.height / 2).rounded(),
+            x: (area.midX - size.width / 2 + offset.x).rounded(),
+            y: (area.midY - size.height / 2 + offset.y).rounded(),
             width: size.width,
             height: size.height
         )
+    }
+
+    // MARK: Zoom and pan
+
+    /// Changes the zoom, keeping the image point under `anchor` (view coordinates) where it is.
+    private func setZoom(_ factor: CGFloat, anchor: CGPoint? = nil) {
+        commitText()
+        let area = viewport
+        let pivot = anchor ?? CGPoint(x: area.midX, y: area.midY)
+        let before = imageRect
+        let oldZoom = zoom
+        guard oldZoom > 0, model.scale > 0 else { return }
+        let imageX = (pivot.x - before.minX) / oldZoom
+        let imageY = (pivot.y - before.minY) / oldZoom
+
+        let lowest = fitFactor * 0.5
+        let clamped = min(max(factor, lowest), 8)
+        let natural = naturalSize
+        let newZoom = clamped / model.scale
+        let size = CGSize(width: natural.width * clamped, height: natural.height * clamped)
+        let wanted = CGPoint(
+            x: pivot.x - imageX * newZoom - (area.midX - size.width / 2),
+            y: pivot.y - imageY * newZoom - (area.midY - size.height / 2)
+        )
+        zoomFactor = clamped
+        pan = clampedPan(wanted, factor: clamped)
+        viewChanged()
+    }
+
+    func zoomIn() { setZoom(currentFactor * 1.25) }
+    func zoomOut() { setZoom(currentFactor / 1.25) }
+    func zoomToActualSize() { setZoom(1) }
+
+    func zoomToFit() {
+        commitText()
+        zoomFactor = nil
+        pan = .zero
+        viewChanged()
+    }
+
+    /// A long scrolling capture would be a sliver when fitted whole, so it
+    /// opens fitted to the window's width, scrolled to the top.
+    private func chooseInitialViewIfNeeded() {
+        guard !didChooseInitialView, bounds.width > 200, bounds.height > 200 else { return }
+        didChooseInitialView = true
+        let natural = naturalSize
+        let area = viewport
+        guard natural.width > 0 else { return }
+        let widthFit = min(1, area.width / natural.width)
+        if natural.height * widthFit > area.height * 1.5 {
+            zoomFactor = widthFit
+            pan = CGPoint(x: 0, y: panLimit(for: widthFit).height)
+        }
+    }
+
+    private func viewChanged() {
+        needsDisplay = true
+        hostWindow?.invalidateCursorRects(for: self)
+        // Publish on the next turn: this can run while SwiftUI is laying the view out.
+        after(0) { [weak self] in
+            guard let self else { return }
+            let percent = Int((self.currentFactor * 100).rounded())
+            if self.model.zoomPercent != percent {
+                self.model.zoomPercent = percent
+            }
+        }
+    }
+
+    override func magnify(with event: NSEvent) {
+        let anchor = convert(event.locationInWindow, from: nil)
+        setZoom(currentFactor * (1 + event.magnification), anchor: anchor)
+    }
+
+    override func smartMagnify(with event: NSEvent) {
+        if zoomFactor == nil {
+            setZoom(1, anchor: convert(event.locationInWindow, from: nil))
+        } else {
+            zoomToFit()
+        }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        if event.modifierFlags.contains(.command) {
+            let anchor = convert(event.locationInWindow, from: nil)
+            setZoom(currentFactor * (1 + event.scrollingDeltaY * 0.01), anchor: anchor)
+            return
+        }
+        let factor = currentFactor
+        let limit = panLimit(for: factor)
+        guard limit.width > 0 || limit.height > 0 else {
+            super.scrollWheel(with: event)
+            return
+        }
+        commitText()
+        let step: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 10
+        let moved = CGPoint(
+            x: pan.x + event.scrollingDeltaX * step,
+            y: pan.y + event.scrollingDeltaY * step
+        )
+        pan = clampedPan(moved, factor: factor)
+        viewChanged()
     }
 
     /// View points per image pixel.
