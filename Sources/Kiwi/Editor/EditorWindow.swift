@@ -51,6 +51,30 @@ enum EditorCommand {
 final class EditorWindow: NSWindow {
     var onCommand: ((EditorCommand) -> Void)?
 
+    /// Receives pinch, smart-zoom and scroll events for the whole window.
+    weak var gestureTarget: NSResponder?
+
+    override func sendEvent(_ event: NSEvent) {
+        // The canvas lives inside a SwiftUI hosting view, which forwards clicks
+        // to it but not trackpad gestures. Deliver those directly.
+        if let target = gestureTarget {
+            switch event.type {
+            case .magnify:
+                target.magnify(with: event)
+                return
+            case .smartMagnify:
+                target.smartMagnify(with: event)
+                return
+            case .scrollWheel:
+                target.scrollWheel(with: event)
+                return
+            default:
+                break
+            }
+        }
+        super.sendEvent(event)
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         // While typing a text annotation, leave shortcuts to the text system.
         if firstResponder is NSTextView {
@@ -138,6 +162,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.delegate = self
         window.onCommand = { [weak self] command in self?.perform(command) }
 
+        window.gestureTarget = canvas
         canvas.onDone = { [weak self] in self?.perform(.done) }
 
         let root = EditorRootView(model: model, canvas: canvas) { [weak self] command in
