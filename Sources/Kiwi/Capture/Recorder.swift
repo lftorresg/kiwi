@@ -1,0 +1,169 @@
+import AppKit
+import AVFoundation
+import ScreenCaptureKit
+
+/// Records a display, or part of one, straight to an MP4 file using
+/// ScreenCaptureKit's own recording output. No frames pass through Kiwi.
+@MainActor
+final class RecordingController: NSObject, SCRecordingOutputDelegate {
+    static let shared = RecordingController()
+
+    /// Called on the main actor whenever recording starts or stops.
+    var onStateChange: ((Bool) -> Void)?
+
+    private(set) var isRecording = false
+    private(set) var startedAt: Date?
+
+    private var isBusy = false
+    private var didFinishWriting = false
+    private var stream: SCStream?
+    private var output: SCRecordingOutput?
+    private var outputURL: URL?
+    private var borderPanel: FloatingPanel?
+    private var screen: NSScreen?
+
+    /// Starts recording. `rect` is in the display's point space with a top-left
+    /// origin; nil records the whole display.
+    func start(displayID: CGDirectDisplayID, rect: CGRect?, screen: NSScreen) {
+        guard !isRecording, !isBusy else { return }
+        isBusy = true
+        self.screen = screen
+        didFinishWriting = false
+
+        if let rect {
+            let border = RegionBorder.make(around: rect, on: screen, color: .systemRed)
+            border.orderFrontRegardless()
+            borderPanel = border
+        }
+        let systemAudio = Prefs.shared.recordSystemAudio
+        let folder = Prefs.shared.saveFolderURL
+
+        Task { @MainActor in
+            do {
+                // Let the outline appear first so the capture filter can exclude Kiwi's windows.
+                try await Task.sleep(nanoseconds: 150_000_000)
+                let found = try await ScreenGrabber.locateDisplay(displayID)
+                let setup = try ScreenGrabber.regionSetup(
+                    display: found.display, content: found.content, rect: rect, showCursor: true
+                )
+
+                let configuration = setup.configuration
+                let size = Self.videoSize(width: configuration.width, height: configuration.height)
+                configuration.width = size.width
+                configuration.height = size.height
+                configuration.scalesToFit = true
+                configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+                configuration.queueDepth = 6
+                configuration.capturesAudio = systemAudio
+                configuration.excludesCurrentProcessAudio = true
+
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                let name = CaptureStore.makeName().replacingOccurrences(of: "Kiwi ", with: "Kiwi Recording ")
+                let url = CaptureStore.uniqueURL(in: folder, name: name, ext: "mp4")
+
+                let recordingConfiguration = SCRecordingOutputConfiguration()
+                recordingConfiguration.outputURL = url
+                recordingConfiguration.outputFileType = .mp4
+                recordingConfiguration.videoCodecType = .h264
+
+                let stream = SCStream(filter: setup.filter, configuration: configuration, delegate: nil)
+                let output = SCRecordingOutput(configuration: recordingConfiguration, delegate: self)
+                try stream.addRecordingOutput(output)
+                try await stream.startCapture()
+
+                self.stream = stream
+                self.output = output
+                self.outputURL = url
+                self.startedAt = Date()
+                self.isBusy = false
+                self.isRecording = true
+                self.onStateChange?(true)
+            } catch {
+                NSLog("Kiwi: recording could not start: %@", error.localizedDescription)
+                self.reset()
+                Toast.error("Couldn't start recording")
+            }
+        }
+    }
+
+    /// Stops recording and shows the finished file.
+    func stop() {
+        guard isRecording, !isBusy, let stream else { return }
+        isBusy = true
+        let url = outputURL
+        let screen = self.screen
+
+        Task { @MainActor in
+            try? await stream.stopCapture()
+            // Give the writer a moment to finalize the file.
+            var waited = 0
+            while !self.didFinishWriting, waited < 40 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                waited += 1
+            }
+            self.reset()
+            guard let url, FileManager.default.fileExists(atPath: url.path) else {
+                Toast.error("The recording could not be saved")
+                return
+            }
+            let thumbnail = await Self.thumbnail(for: url)
+            PreviewHUD.shared.showRecording(at: url, thumbnail: thumbnail, on: screen)
+        }
+    }
+
+    private func reset() {
+        let wasRecording = isRecording
+        borderPanel?.orderOut(nil)
+        borderPanel = nil
+        stream = nil
+        output = nil
+        outputURL = nil
+        startedAt = nil
+        isRecording = false
+        isBusy = false
+        if wasRecording { onStateChange?(false) }
+    }
+
+    // MARK: SCRecordingOutputDelegate (called on a background queue)
+
+    nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
+        Task { @MainActor in
+            self.didFinishWriting = true
+        }
+    }
+
+    nonisolated func recordingOutput(_ recordingOutput: SCRecordingOutput, didFailWithError error: Error) {
+        let description = error.localizedDescription
+        Task { @MainActor in
+            NSLog("Kiwi: recording failed: %@", description)
+            self.didFinishWriting = true
+            if self.isRecording, !self.isBusy {
+                self.reset()
+                Toast.error("Recording stopped unexpectedly")
+            }
+        }
+    }
+
+    // MARK: Helpers
+
+    /// H.264 wants even dimensions and is happiest at 4K or below.
+    static func videoSize(width: Int, height: Int) -> (width: Int, height: Int) {
+        let maxWidth = 3840.0
+        let maxHeight = 2160.0
+        let w = Double(max(2, width))
+        let h = Double(max(2, height))
+        let fit = min(1, maxWidth / w, maxHeight / h)
+        let evenWidth = max(2, Int((w * fit) / 2) * 2)
+        let evenHeight = max(2, Int((h * fit) / 2) * 2)
+        return (evenWidth, evenHeight)
+    }
+
+    private static func thumbnail(for url: URL) async -> NSImage? {
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 720, height: 720)
+        guard let frame = try? await generator.image(at: .zero) else { return nil }
+        let image = frame.image
+        return NSImage(cgImage: image, size: NSSize(width: image.width / 2, height: image.height / 2))
+    }
+}
