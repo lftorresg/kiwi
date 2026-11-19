@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Deliberately empty. Kiwi runs under the hardened runtime with no exceptions:
+  no JIT, no unsigned memory, no DYLD environment variables, no disabled
+  library validation, no debugger attachment (get-task-allow), no microphone.
+-->
+<dict/>
+</plist>
