@@ -230,6 +230,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
                 switch outcome {
                 case .success(let url):
                     Toast.show("Saved \(url.lastPathComponent)", symbol: "square.and.arrow.down.fill")
+                    NSWorkspace.shared.activateFileViewerSelecting([url])
                 case .failure(let error):
                     Toast.error(error.localizedDescription)
                 }
