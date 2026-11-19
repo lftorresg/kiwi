@@ -45,7 +45,7 @@ Kiwi can see your screen, so it is built to hold as little power as possible and
 - **No App Sandbox.** The wheel writes results next to the files you drop, which the sandbox does not allow without a folder prompt per location. The hardened runtime and the absence of network code are the compensating controls.
 - **Not notarized.** Local builds are ad hoc signed, or signed with your own local certificate. Gatekeeper treats them as software you built yourself.
 - **Clipboard history tools** keep whatever was copied. If you use one, turn on *Redact every capture* so the unredacted image never reaches the clipboard.
-- **Ad hoc signatures change on every build**, so macOS asks for Screen Recording again after a rebuild. A stable local signing certificate avoids this (see README).
+- **Ad hoc signatures change on every build**, so macOS asks for Screen Recording again after a rebuild. `scripts/setup-signing.sh` creates a stable local identity instead: a self-signed certificate trusted for code signing only, for your user only, whose private key stays in your login keychain. The trade-off: whatever can sign with that key can produce an app macOS treats as Kiwi, grant included, so the key is imported without pre-authorising any app and macOS asks before each use unless you choose Always Allow.
 
 ## Reporting a problem
 

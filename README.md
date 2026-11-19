@@ -148,7 +148,7 @@ scripts/      verify.sh
 
 **⇧⌘4 still opens the macOS tool.** The native shortcut is still enabled. See *First launch*, step 2.
 
-**Captures fail after a rebuild.** With ad hoc signing, each build looks like a new app to macOS and the Screen Recording grant no longer applies. Either run `make reset-permissions` and allow Kiwi again, or sign with a stable identity: in Keychain Access choose Certificate Assistant → Create a Certificate, name it `Kiwi Local`, type *Code Signing*. The Makefile picks it up automatically and the grant then survives rebuilds.
+**macOS asks for Screen Recording again after every rebuild.** With ad hoc signing, each build looks like a new app to macOS. Run `bash scripts/setup-signing.sh` once: it creates a local code signing identity named `Kiwi Local`, which the Makefile then uses automatically. Allow Kiwi one more time after the next build and the grant survives every rebuild after that.
 
 **macOS asks to confirm screen recording from time to time.** That is a system policy for all third-party capture tools.
 
