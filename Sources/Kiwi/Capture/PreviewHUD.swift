@@ -53,7 +53,7 @@ final class PreviewHUD {
                     Toast.show("Recording copied", symbol: "doc.on.doc.fill")
                 },
                 onDelete: { [weak self] in
-                    try? FileManager.default.trashItem(at: url, resultingItemURL: nil)
+                    NSWorkspace.shared.recycle([url])
                     self?.dismiss()
                     Toast.show("Recording moved to Trash", symbol: "trash.fill")
                 },

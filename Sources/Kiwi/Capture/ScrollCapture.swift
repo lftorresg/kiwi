@@ -69,12 +69,13 @@ final class ScrollCaptureController {
             return
         }
         let scale = grabber?.scale ?? screen.backingScaleFactor
+        let displayID = screen.displayID
         teardown()
         queue.async {
             let image = stitcher.finish()
             Task { @MainActor in
                 if let image {
-                    CaptureController.shared.ingest(image: image, scale: scale, screen: screen)
+                    CaptureController.shared.ingest(image: image, scale: scale, screen: NSScreen.matching(displayID))
                 } else {
                     Toast.error("Nothing was captured")
                 }

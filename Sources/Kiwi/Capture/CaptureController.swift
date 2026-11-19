@@ -151,7 +151,7 @@ final class CaptureController {
 
     /// Takes a freshly grabbed image through redaction (when enabled), the
     /// preview, the clipboard and the save folder.
-    func ingest(image: CGImage, scale: CGFloat, screen: NSScreen) {
+    func ingest(image: CGImage, scale: CGFloat, screen: NSScreen?) {
         let prefs = Prefs.shared
         if prefs.playSound { Sound.shutter() }
 
@@ -162,6 +162,7 @@ final class CaptureController {
 
         // Redact first: nothing reaches the clipboard or disk until the scan is done.
         let options = prefs.redactOptions
+        let displayID = screen?.displayID
         DispatchQueue.global(qos: .userInitiated).async {
             let outcome: Result<(image: CGImage, count: Int), Error> = Result {
                 let rects = try PIIScanner.scan(image, options: options)
@@ -169,6 +170,7 @@ final class CaptureController {
                 return (redacted, rects.count)
             }
             Task { @MainActor in
+                let screen = NSScreen.matching(displayID)
                 switch outcome {
                 case .success(let value):
                     self.deliver(image: value.image, scale: scale, screen: screen, redaction: .done(value.count))
@@ -180,7 +182,7 @@ final class CaptureController {
         }
     }
 
-    private func deliver(image: CGImage, scale: CGFloat, screen: NSScreen, redaction: RedactionOutcome) {
+    private func deliver(image: CGImage, scale: CGFloat, screen: NSScreen?, redaction: RedactionOutcome) {
         let prefs = Prefs.shared
         let capture = Capture(image: image, scale: scale)
         last = capture
@@ -244,7 +246,7 @@ final class CaptureController {
             Task { @MainActor in
                 if capture.isDeleted {
                     try? FileManager.default.removeItem(at: cacheURL)
-                    if let saved { try? FileManager.default.trashItem(at: saved, resultingItemURL: nil) }
+                    if let saved { NSWorkspace.shared.recycle([saved]) }
                     return
                 }
                 if copy, let data {
@@ -295,7 +297,7 @@ final class CaptureController {
         capture.isDeleted = true
         try? FileManager.default.removeItem(at: capture.cacheURL)
         if let saved = capture.savedURL {
-            try? FileManager.default.trashItem(at: saved, resultingItemURL: nil)
+            NSWorkspace.shared.recycle([saved])
             capture.savedURL = nil
         }
         Clipboard.clear(ifStampIs: capture.clipboardStamp)

@@ -196,15 +196,7 @@ extension CGImage {
         let ratio = CGFloat(maxPixel) / CGFloat(longest)
         let newWidth = max(1, Int(CGFloat(width) * ratio))
         let newHeight = max(1, Int(CGFloat(height) * ratio))
-        guard let context = CGContext(
-            data: nil,
-            width: newWidth,
-            height: newHeight,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return self }
+        guard let context = Bitmap.context(width: newWidth, height: newHeight, space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return self }
         context.interpolationQuality = .high
         context.draw(self, in: CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
         return context.makeImage() ?? self

@@ -144,7 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func updateRecordingTitle() {
         guard let button = statusItem?.button else { return }
         let elapsed = Int(Date().timeIntervalSince(RecordingController.shared.startedAt ?? Date()))
-        button.title = String(format: " %d:%02d", elapsed / 60, elapsed % 60)
+        let minutes = elapsed / 60
+        let seconds = elapsed % 60
+        button.title = " \(minutes):\(seconds < 10 ? "0" : "")\(seconds)"
     }
 
     private func menuItem(_ title: String, _ action: Selector, key: String = "", symbol: String) -> NSMenuItem {

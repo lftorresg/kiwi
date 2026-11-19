@@ -13,6 +13,9 @@ enum Checksum {
             if chunk.isEmpty { break }
             hasher.update(data: chunk)
         }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+        return hasher.finalize().map { byte in
+            let hex = String(byte, radix: 16)
+            return byte < 16 ? "0" + hex : hex
+        }.joined()
     }
 }

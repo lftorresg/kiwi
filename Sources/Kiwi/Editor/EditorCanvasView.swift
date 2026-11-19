@@ -31,7 +31,7 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
                 MainActor.assumeIsolated {
                     guard let self else { return }
                     self.needsDisplay = true
-                    self.window?.invalidateCursorRects(for: self)
+                    self.hostWindow?.invalidateCursorRects(for: self)
                 }
             }
         }
@@ -47,13 +47,13 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.makeFirstResponder(self)
+        hostWindow?.makeFirstResponder(self)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         needsDisplay = true
-        window?.invalidateCursorRects(for: self)
+        hostWindow?.invalidateCursorRects(for: self)
     }
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
@@ -167,12 +167,15 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     private func drawSelectionOutline() {
         guard let id = model.selectedID,
               let selected = model.annotations.first(where: { $0.id == id }) else { return }
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
         let outline = viewRect(for: selected.bounds).insetBy(dx: -4, dy: -4)
-        let path = NSBezierPath(roundedRect: outline, xRadius: 6, yRadius: 6)
-        path.lineWidth = 1.5
-        path.setLineDash([5, 4], count: 2, phase: 0)
-        Theme.kiwiNS.setStroke()
-        path.stroke()
+        context.saveGState()
+        context.setLineWidth(1.5)
+        context.setLineDash(phase: 0, lengths: [5, 4])
+        context.setStrokeColor(Theme.kiwiNS.cgColor)
+        context.addPath(NSBezierPath(roundedRect: outline, xRadius: 6, yRadius: 6).cgPath)
+        context.strokePath()
+        context.restoreGState()
     }
 
     private func drawCropOverlay(in rect: CGRect) {
@@ -193,7 +196,7 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     // MARK: Mouse
 
     override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
+        hostWindow?.makeFirstResponder(self)
         commitText()
 
         let point = imagePoint(for: event)
@@ -381,7 +384,7 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         addSubview(field)
         textField = field
         textOrigin = point
-        window?.makeFirstResponder(field)
+        hostWindow?.makeFirstResponder(field)
     }
 
     func controlTextDidEndEditing(_ notification: Notification) {
@@ -402,7 +405,7 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
             annotation.text = string
             model.add(annotation)
         }
-        if let window, window.firstResponder !== self {
+        if let window = hostWindow, window.firstResponder !== self {
             window.makeFirstResponder(self)
         }
         needsDisplay = true

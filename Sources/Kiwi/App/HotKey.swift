@@ -3,11 +3,14 @@ import Carbon.HIToolbox
 
 /// Global hotkeys through Carbon's RegisterEventHotKey.
 /// This path needs no Accessibility or Input Monitoring permission.
+///
+/// Carbon is a C API, so the calls below are marked `unsafe`. Kiwi passes it
+/// only stack values and never stores, dereferences or frees what it returns:
+/// hotkeys stay registered for the life of the process.
 final class HotKeyCenter: @unchecked Sendable {
     static let shared = HotKeyCenter()
 
     private var handlers: [UInt32: () -> Void] = [:]
-    private var refs: [UInt32: EventHotKeyRef] = [:]
     private var nextID: UInt32 = 1
     private var installed = false
 
@@ -21,18 +24,17 @@ final class HotKeyCenter: @unchecked Sendable {
         let id = nextID
         nextID += 1
         let hotKeyID = EventHotKeyID(signature: OSType(0x4B495749), id: id) // 'KIWI'
-        var ref: EventHotKeyRef?
-        let status = RegisterEventHotKey(
+        var reference: EventHotKeyRef?
+        let status = unsafe RegisterEventHotKey(
             UInt32(keyCode),
             UInt32(modifiers),
             hotKeyID,
             GetApplicationEventTarget(),
             0,
-            &ref
+            &reference
         )
-        guard status == noErr, let ref else { return false }
+        guard status == noErr else { return false }
         handlers[id] = handler
-        refs[id] = ref
         return true
     }
 
@@ -49,11 +51,11 @@ final class HotKeyCenter: @unchecked Sendable {
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
-        let status = InstallEventHandler(
+        let status = unsafe InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, _ -> OSStatus in
                 var hotKeyID = EventHotKeyID()
-                let status = GetEventParameter(
+                let status = unsafe GetEventParameter(
                     event,
                     EventParamName(kEventParamDirectObject),
                     EventParamType(typeEventHotKeyID),
