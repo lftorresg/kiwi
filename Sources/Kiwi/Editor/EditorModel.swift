@@ -15,6 +15,8 @@ final class EditorModel: ObservableObject {
     @Published var selectedID: UUID?
     @Published private(set) var base: CGImage
     @Published private(set) var annotations: [Annotation] = []
+    /// The capture's name as typed in the editor's name field.
+    @Published var captureName: String
     /// Current zoom of the canvas, for the toolbar readout.
     @Published var zoomPercent = 100
     @Published private(set) var canUndo = false
@@ -26,7 +28,8 @@ final class EditorModel: ObservableObject {
     private var undoStack: [Snapshot] = []
     private var redoStack: [Snapshot] = []
 
-    init(image: CGImage, scale: CGFloat) {
+    init(image: CGImage, scale: CGFloat, name: String) {
+        self.captureName = name
         self.base = image
         self.scale = max(1, scale)
     }

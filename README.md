@@ -104,7 +104,7 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles. 
 | ⌫ | Delete the selected annotation |
 | ⌘⌫ | Delete the screenshot |
 
-Click the name in the title bar to rename a capture. The name is used for Save, Convert, Save As and drag-out, and a file that was already saved is renamed on disk.
+Type in the name field at the top left of the editor and press Return to rename a capture. The name is used for Save, Convert, Save As and drag-out, and a file that was already saved is renamed on disk.
 
 Closing the editor window keeps your edits: the edited image replaces the copy on the clipboard. To throw the capture away, use Delete. A file is written to your screenshots folder only when you press Save, export, or have *Also save every capture* on.
 

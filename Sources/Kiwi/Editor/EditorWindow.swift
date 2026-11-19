@@ -44,6 +44,7 @@ enum EditorCommand {
     case copy, save, saveAs, delete, done, undo, redo, close, autoRedact
     case export(ImageFormat)
     case zoomIn, zoomOut, zoomFit, zoomActual
+    case rename
 }
 
 /// Window that turns Command-key shortcuts into editor commands.
@@ -91,7 +92,7 @@ final class EditorWindow: NSWindow {
 }
 
 @MainActor
-final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDelegate {
+final class EditorWindowController: NSObject, NSWindowDelegate {
     let capture: Capture
     var onClose: (() -> Void)?
 
@@ -99,13 +100,11 @@ final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDeleg
     private let canvas: EditorCanvasView
     private let window: EditorWindow
     private var isScanning = false
-    /// Editable capture name, shown in the title bar next to the window buttons.
-    private let nameField = NSTextField()
     /// True once Done or Delete has decided what happens to the capture.
     private var isSettled = false
 
     init(capture: Capture) {
-        let editorModel = EditorModel(image: capture.image, scale: capture.scale)
+        let editorModel = EditorModel(image: capture.image, scale: capture.scale, name: capture.name)
         self.capture = capture
         self.model = editorModel
         self.canvas = EditorCanvasView(model: editorModel)
@@ -114,7 +113,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDeleg
         let visible = (NSScreen.underMouse ?? NSScreen.main)?.visibleFrame
             ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         let natural = capture.pointSize
-        let width = min(max(natural.width + 72, 980), visible.width * 0.9)
+        let width = min(max(natural.width + 72, 1060), visible.width * 0.92)
         let height = min(max(natural.height + 156, 560), visible.height * 0.9)
         let frame = NSRect(
             x: visible.midX - width / 2,
@@ -132,12 +131,10 @@ final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDeleg
         super.init()
 
         window.title = capture.name
-        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        installNameField()
         window.backgroundColor = .underPageBackgroundColor
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 980, height: 520)
+        window.contentMinSize = NSSize(width: 1060, height: 520)
         window.delegate = self
         window.onCommand = { [weak self] command in self?.perform(command) }
 
@@ -152,56 +149,17 @@ final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDeleg
         window.setFrame(frame, display: false)
     }
 
-    /// Puts an editable name where the window title would be. The name is used
-    /// for Save, Convert, Save As and drag-out.
-    private func installNameField() {
-        nameField.stringValue = capture.name
-        nameField.isBordered = false
-        nameField.isBezeled = false
-        nameField.drawsBackground = false
-        nameField.isEditable = true
-        nameField.focusRingType = .none
-        nameField.font = .systemFont(ofSize: 13, weight: .semibold)
-        nameField.lineBreakMode = .byTruncatingMiddle
-        nameField.usesSingleLineMode = true
-        nameField.placeholderString = "Name this capture"
-        nameField.toolTip = "Click to rename"
-        nameField.delegate = self
-        nameField.translatesAutoresizingMaskIntoConstraints = false
-
-        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 360, height: 28))
-        holder.addSubview(nameField)
-        NSLayoutConstraint.activate([
-            nameField.leadingAnchor.constraint(equalTo: holder.leadingAnchor, constant: 8),
-            nameField.trailingAnchor.constraint(equalTo: holder.trailingAnchor),
-            nameField.centerYAnchor.constraint(equalTo: holder.centerYAnchor),
-        ])
-
-        let accessory = NSTitlebarAccessoryViewController()
-        accessory.view = holder
-        accessory.layoutAttribute = .leading
-        window.addTitlebarAccessoryViewController(accessory)
-    }
-
-    func controlTextDidEndEditing(_ notification: Notification) {
-        guard (notification.object as? NSTextField) === nameField else { return }
-        let applied = CaptureController.shared.rename(capture, to: nameField.stringValue)
-        nameField.stringValue = applied
+    /// Applies whatever is in the name field. Called before any command and on
+    /// close, so Save, Convert and drag-out always use the name on screen.
+    @discardableResult
+    private func applyName() -> Bool {
+        let before = capture.name
+        let applied = CaptureController.shared.rename(capture, to: model.captureName)
+        if model.captureName != applied {
+            model.captureName = applied
+        }
         window.title = applied
-        // After Return nothing has focus; hand it back to the canvas so tool keys work.
-        after(0) { [weak self] in
-            guard let self else { return }
-            if self.window.firstResponder === self.window {
-                self.window.makeFirstResponder(self.canvas)
-            }
-        }
-    }
-
-    /// Applies a name that is still being typed, before anything uses it.
-    private func commitName() {
-        if nameField.currentEditor() != nil {
-            window.makeFirstResponder(canvas)
-        }
+        return applied != before
     }
 
     func show() {
@@ -218,7 +176,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDeleg
         // Closing the window keeps the edits: the edited image replaces the
         // original wherever it already went (clipboard, saved file), so a
         // redacted capture never leaves its unredacted original behind.
-        commitName()
+        applyName()
         if !isSettled {
             isSettled = true
             canvas.commitText()
@@ -237,7 +195,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDeleg
     // MARK: Commands
 
     private func perform(_ command: EditorCommand) {
-        commitName()
+        let renamed = applyName()
         canvas.commitText()
         switch command {
         case .undo:
@@ -268,6 +226,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate, NSTextFieldDeleg
             window.close()
         case .autoRedact:
             autoRedact()
+        case .rename:
+            // Return in the name field: hand the keyboard back to the canvas.
+            window.makeFirstResponder(canvas)
+            if renamed {
+                Toast.show("Renamed to \(capture.name)", symbol: "pencil")
+            }
         case .export(let format):
             export(as: format)
         case .zoomIn:
@@ -390,7 +354,11 @@ private struct EditorRootView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                toolBar
+                HStack(alignment: .top, spacing: 12) {
+                    nameField
+                    Spacer(minLength: 0)
+                    toolBar
+                }
                 Spacer(minLength: 0)
                 HStack(alignment: .bottom, spacing: 12) {
                     styleBar
@@ -404,7 +372,24 @@ private struct EditorRootView: View {
         }
     }
 
-    // Tools and history, centered at the top.
+    // The capture's name, top left. Editing it renames the capture.
+    private var nameField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "pencil")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+            TextField("Name this capture", text: $model.captureName)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5, weight: .medium))
+                .onSubmit { perform(.rename) }
+        }
+        .padding(.horizontal, 14)
+        .frame(width: 230, height: 42)
+        .glassEffect(.regular, in: .capsule)
+        .help("Rename this capture: type a name and press Return")
+    }
+
+    // Tools and history, top right.
     private var toolBar: some View {
         HStack(spacing: 2) {
             ForEach(Tool.allCases) { tool in
