@@ -206,15 +206,7 @@ final class ScrollStitcher: @unchecked Sendable {
         if let own = image.colorSpace, own.model == .rgb { spaces.append(own) }
         spaces.append(fallback)
         for space in spaces {
-            if let context = CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: space,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) {
+            if let context = Bitmap.context(width: width, height: height, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
                 context.interpolationQuality = .none
                 return context
             }
@@ -229,15 +221,7 @@ final class ScrollStitcher: @unchecked Sendable {
         let width = image.width
         let height = image.height
         guard width >= bands, height > 0 else { return nil }
-        guard let context = CGContext(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceGray(),
-            bitmapInfo: CGImageAlphaInfo.none.rawValue
-        ) else { return nil }
+        guard let context = Bitmap.context(width: width, height: height, space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         guard let grey = context.makeImage(), let data = grey.dataProvider?.data else { return nil }
 

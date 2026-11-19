@@ -145,7 +145,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         // SwiftUI installs the canvas on its first layout pass, so focus it a beat later.
         after(0.05) { [weak self] in
-            guard let self, self.canvas.window != nil else { return }
+            guard let self, self.canvas.hostWindow != nil else { return }
             self.window.makeFirstResponder(self.canvas)
         }
     }

@@ -252,7 +252,7 @@ enum AnnotationRenderer {
             let rect = annotation.rect
             let radius = min(annotation.width * 1.5, rect.width / 2, rect.height / 2)
             if radius > 0 {
-                context.addPath(CGPath(roundedRect: rect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+                context.addPath(NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).cgPath)
             } else {
                 context.addRect(rect)
             }

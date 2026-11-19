@@ -80,7 +80,7 @@ final class SelectionController {
             guard let view = panel.contentView as? SelectionView, view !== active else { continue }
             view.clearPointer()
         }
-        if let window = active.window, !window.isKeyWindow {
+        if let window = active.hostWindow, !window.isKeyWindow {
             window.makeKey()
             window.makeFirstResponder(active)
         }

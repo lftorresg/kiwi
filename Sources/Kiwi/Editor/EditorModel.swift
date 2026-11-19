@@ -214,15 +214,7 @@ final class EditorModel: ObservableObject {
         }
         spaces.append(fallback)
         for space in spaces {
-            if let context = CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: space,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) {
+            if let context = Bitmap.context(width: width, height: height, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) {
                 return context
             }
         }

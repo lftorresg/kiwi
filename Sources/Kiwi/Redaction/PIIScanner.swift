@@ -122,15 +122,7 @@ enum PIIScanner {
         if let own = image.colorSpace, own.model == .rgb { space = own }
 
         func makeContext(_ colorSpace: CGColorSpace) -> CGContext? {
-            CGContext(
-                data: nil,
-                width: width,
-                height: height,
-                bitsPerComponent: 8,
-                bytesPerRow: 0,
-                space: colorSpace,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )
+            Bitmap.context(width: width, height: height, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         }
         guard let context = makeContext(space) ?? makeContext(fallback) else {
             throw KiwiError("Couldn't redact the image.")
