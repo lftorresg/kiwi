@@ -13,10 +13,11 @@ final class Capture {
     let id = UUID()
     let origin: Origin
     let scale: CGFloat
-    let name: String
+    /// File name without extension. Starts as a timestamp; the user can rename it.
+    var name: String
     var image: CGImage
     /// Working copy in Kiwi's cache; backs drag-out from the preview.
-    let cacheURL: URL
+    var cacheURL: URL
     /// Set once the capture has been saved to the user's folder.
     var savedURL: URL?
     /// Clipboard change count right after Kiwi copied this capture.
@@ -78,6 +79,21 @@ enum CaptureStore {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         return "Kiwi " + formatter.string(from: date)
+    }
+
+    /// Turns what the user typed into a safe file name: no path separators,
+    /// no leading dots, no extension, a sensible length.
+    static func sanitizedName(_ raw: String) -> String {
+        let forbidden = CharacterSet(charactersIn: "/:\\").union(.controlCharacters).union(.newlines)
+        var name = raw.components(separatedBy: forbidden).joined(separator: " ")
+        name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        while name.hasPrefix(".") {
+            name.removeFirst()
+        }
+        for ext in [".png", ".jpg", ".jpeg", ".heic", ".avif", ".tiff", ".pdf"] where name.lowercased().hasSuffix(ext) {
+            name = String(name.dropLast(ext.count))
+        }
+        return String(name.prefix(120)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// PNG data tagged with the right DPI so Retina captures open at their true size.
