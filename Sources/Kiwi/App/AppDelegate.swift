@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(menuItem("Capture Window", #selector(captureWindow), symbol: "macwindow"))
         menu.addItem(menuItem("Capture Screen", #selector(captureScreen), key: "3", symbol: "display"))
         menu.addItem(menuItem("Scrolling Capture", #selector(captureScrolling), key: "6", symbol: "arrow.down.to.line.compact"))
+        menu.addItem(delayedCaptureItem())
         menu.addItem(.separator())
         menu.addItem(menuItem("Record Area", #selector(recordArea), key: "5", symbol: "record.circle"))
         menu.addItem(menuItem("Record Screen", #selector(recordScreen), symbol: "menubar.dock.rectangle"))
@@ -111,6 +112,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !RecordingController.shared.isRecording {
             statusItem?.menu = menu
         }
+    }
+
+    private func delayedCaptureItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Capture After Delay", action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "timer", accessibilityDescription: nil)
+        let submenu = NSMenu()
+        for seconds in [3, 5, 10] {
+            let entry = NSMenuItem(title: "\(seconds) seconds", action: #selector(captureDelayed(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.tag = seconds
+            submenu.addItem(entry)
+        }
+        item.submenu = submenu
+        return item
+    }
+
+    @objc private func captureDelayed(_ sender: NSMenuItem) {
+        CaptureController.shared.captureAfterDelay(seconds: sender.tag)
     }
 
     private func recentCapturesItem() -> NSMenuItem {
