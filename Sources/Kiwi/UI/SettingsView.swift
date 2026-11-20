@@ -1,6 +1,7 @@
 import AppKit
 import ServiceManagement
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Small helpers for jumping into System Settings and restarting Kiwi.
 @MainActor
@@ -205,6 +206,20 @@ struct SettingsView: View {
             Text("While dragging files, tap ⇧ for Convert, ⌘ for Tools or ⌃ for Actions, then drop on a slice. Drop on the centre to cancel.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            LabeledContent("Never show for drags from") {
+                Button("Add App…") { addExcludedApp() }
+            }
+            ForEach(prefs.excludedApps, id: \.self) { bundleID in
+                LabeledContent(appName(for: bundleID)) {
+                    Button {
+                        prefs.excludedApps.removeAll { $0 == bundleID }
+                    } label: {
+                        Image(systemName: "minus.circle")
+                    }
+                    .buttonStyle(.borderless)
+                    .help("Show the wheel for this app again")
+                }
+            }
         }
     }
 
@@ -272,6 +287,28 @@ struct SettingsView: View {
             prefs.recordMicrophone = false
             Toast.error("Allow the microphone for Kiwi in System Settings")
             SystemLinks.openMicrophoneSettings()
+        }
+    }
+
+    private func appName(for bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return bundleID
+        }
+        return FileManager.default.displayName(atPath: url.path)
+    }
+
+    private func addExcludedApp() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.prompt = "Exclude"
+        guard panel.runModal() == .OK, let url = panel.url,
+              let bundleID = Bundle(url: url)?.bundleIdentifier else { return }
+        if !prefs.excludedApps.contains(bundleID) {
+            prefs.excludedApps.append(bundleID)
         }
     }
 

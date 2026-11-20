@@ -24,6 +24,7 @@ final class Prefs: ObservableObject {
         static let recordHEVC = "recordHEVC"
         static let shortcuts = "shortcuts"
         static let recordMicrophone = "recordMicrophone"
+        static let excludedApps = "excludedApps"
     }
 
     @Published var copyOnCapture: Bool {
@@ -46,6 +47,10 @@ final class Prefs: ObservableObject {
     }
     @Published var wheelEnabled: Bool {
         didSet { UserDefaults.standard.set(wheelEnabled, forKey: Key.wheelEnabled) }
+    }
+    /// Bundle identifiers of apps whose drags never bring up the wheel.
+    @Published var excludedApps: [String] {
+        didSet { UserDefaults.standard.set(excludedApps, forKey: Key.excludedApps) }
     }
     @Published var didOnboard: Bool {
         didSet { UserDefaults.standard.set(didOnboard, forKey: Key.didOnboard) }
@@ -175,6 +180,7 @@ final class Prefs: ObservableObject {
         editAfterCapture = defaults.bool(forKey: Key.editAfterCapture)
         recordHEVC = defaults.bool(forKey: Key.recordHEVC)
         recordMicrophone = defaults.bool(forKey: Key.recordMicrophone)
+        excludedApps = defaults.stringArray(forKey: Key.excludedApps) ?? []
         shortcuts = Prefs.decodeShortcuts(defaults.dictionary(forKey: Key.shortcuts) ?? [:])
     }
 }
