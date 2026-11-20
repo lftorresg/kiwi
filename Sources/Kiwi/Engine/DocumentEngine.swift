@@ -69,7 +69,7 @@ enum DocumentEngine {
             return NSAttributedString(string: text, attributes: [.font: NSFont.systemFont(ofSize: 12)])
         }
         do {
-            return try NSAttributedString(url: url, options: [.documentType: type], documentAttributes: nil)
+            return try DocumentBridge.read(url, as: type)
         } catch {
             throw KiwiError("Couldn't read \(name).")
         }
@@ -119,7 +119,7 @@ enum DocumentEngine {
         view.isHorizontallyResizable = false
         view.isVerticallyResizable = true
         view.textContainerInset = .zero
-        view.textStorage?.setAttributedString(text)
+        view.liveTextStorage?.setAttributedString(text)
         view.sizeToFit()
 
         let operation = NSPrintOperation(view: view, printInfo: info)

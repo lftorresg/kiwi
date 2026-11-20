@@ -44,6 +44,24 @@ enum Coordination {
     }
 }
 
+enum DocumentBridge {
+    /// Reads a document as exactly the given type.
+    static func read(_ url: URL, as type: NSAttributedString.DocumentType) throws -> NSAttributedString {
+        // Flagged only because the initializer can hand back the document's
+        // attributes through a pointer. Passing nil asks for none, so no
+        // pointer of ours is involved.
+        return try unsafe NSAttributedString(url: url, options: [.documentType: type], documentAttributes: nil)
+    }
+}
+
+extension NSTextView {
+    /// The view's text storage. AppKit declares `textStorage` as
+    /// unowned(unsafe); reading it on the main thread from a live view is safe.
+    var liveTextStorage: NSTextStorage? {
+        return unsafe textStorage
+    }
+}
+
 extension NSView {
     /// The window this view is in. AppKit declares `NSView.window` as
     /// unowned(unsafe); reading it on the main thread from a live view is safe.
