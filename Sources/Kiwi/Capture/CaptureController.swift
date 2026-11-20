@@ -15,6 +15,7 @@ final class CaptureController {
     /// Called whenever the recent list changes.
     var onRecentsChange: (() -> Void)?
     private let recentLimit = 12
+    private var isMakingGIF = false
 
     /// Called when a capture is attempted without Screen Recording permission.
     var onNeedsSetup: (() -> Void)?
@@ -449,6 +450,42 @@ final class CaptureController {
             return
         }
         edit(Capture(reopening: record, image: image))
+    }
+
+    // MARK: GIF
+
+    /// Converts a recording to a GIF next to it and shows the result in Finder.
+    func makeGIF(from video: URL) {
+        guard !isMakingGIF else {
+            Toast.show("Still making the last GIF…", symbol: "hourglass")
+            return
+        }
+        guard FileManager.default.fileExists(atPath: video.path) else {
+            Toast.error("That recording is no longer there")
+            return
+        }
+        isMakingGIF = true
+        Toast.show("Making GIF…", symbol: "photo.stack")
+        Task { @MainActor in
+            do {
+                let gif = try await GIFExporter.export(video: video)
+                self.isMakingGIF = false
+                Toast.show("GIF saved", symbol: "photo.stack.fill")
+                NSWorkspace.shared.activateFileViewerSelecting([gif])
+            } catch {
+                self.isMakingGIF = false
+                NSLog("Kiwi: GIF export failed: %@", error.localizedDescription)
+                Toast.error((error as? KiwiError)?.message ?? "Couldn't make the GIF")
+            }
+        }
+    }
+
+    func makeGIFOfLastRecording() {
+        guard let video = RecordingController.shared.lastURL else {
+            Toast.show("No recording yet", symbol: "record.circle")
+            return
+        }
+        makeGIF(from: video)
     }
 
     func pinLast() {

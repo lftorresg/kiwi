@@ -48,6 +48,9 @@ final class PreviewHUD {
                 onReveal: {
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 },
+                onGIF: {
+                    CaptureController.shared.makeGIF(from: url)
+                },
                 onCopy: {
                     Clipboard.copy(files: [url])
                     Toast.show("Recording copied", symbol: "doc.on.doc.fill")
@@ -224,6 +227,7 @@ private struct RecordingHUDView: View {
     let image: NSImage?
     let fileURL: URL
     let onReveal: () -> Void
+    let onGIF: () -> Void
     let onCopy: () -> Void
     let onDelete: () -> Void
     let onClose: () -> Void
@@ -242,6 +246,9 @@ private struct RecordingHUDView: View {
                         Label("Show", systemImage: "folder")
                     }
                     .help("Show in Finder")
+
+                    Button("GIF", action: onGIF)
+                        .help("Make an animated GIF of this recording")
 
                     Button(action: onDelete) {
                         Image(systemName: "trash")
