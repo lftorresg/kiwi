@@ -53,6 +53,7 @@ enum EditorCommand {
     case copyText
     case pickText
     case pin
+    case backdrop(Backdrop?)
 }
 
 /// Window that turns Command-key shortcuts into editor commands.
@@ -264,6 +265,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             applyEdits()
             PinController.shared.pin(capture.image, scale: capture.scale)
             Toast.show("Pinned  ·  double-click the pin to close it", symbol: "pin.fill")
+        case .backdrop(let backdrop):
+            if model.setBackdrop(backdrop) {
+                canvas.zoomToFit()
+            } else {
+                Toast.error("This image is too large for a background")
+            }
         case .copyText:
             copyText(in: nil)
         case .pickText:
@@ -538,6 +545,7 @@ private struct EditorRootView: View {
             separator
             redactButton(showLabel: redactLabel)
             textButton
+            backdropMenu
             separator
             zoomControls
         }
@@ -563,12 +571,34 @@ private struct EditorRootView: View {
             separator
             redactButton(showLabel: false)
             textButton
+            backdropMenu
             separator
             zoomControls
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .glassEffect(.regular, in: .capsule)
+    }
+
+    /// Sets the image on a coloured backdrop, or takes the backdrop away.
+    private var backdropMenu: some View {
+        Menu {
+            ForEach(Backdrop.allCases) { backdrop in
+                Button(backdrop.title) { perform(.backdrop(backdrop)) }
+            }
+            Divider()
+            Button("No Background") { perform(.backdrop(nil)) }
+                .disabled(!model.hasBackdrop)
+        } label: {
+            Image(systemName: "rectangle.inset.filled")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Background: set the image on a coloured backdrop with rounded corners and a shadow")
     }
 
     private var textButton: some View {

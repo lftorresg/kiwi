@@ -27,6 +27,18 @@ final class EditorModel: ObservableObject {
     /// Pixels per point of the source image.
     let scale: CGFloat
 
+    /// A backdrop Kiwi applied: the image before, the image after, and how
+    /// far the image was moved in from each edge.
+    private struct Framing {
+        let source: CGImage
+        let framed: CGImage
+        let inset: CGFloat
+    }
+
+    /// Recent framings, so that picking another backdrop (also after an undo)
+    /// replaces the current one instead of framing the frame.
+    private var framings: [Framing] = []
+
     private var undoStack: [Snapshot] = []
     private var redoStack: [Snapshot] = []
 
@@ -160,6 +172,96 @@ final class EditorModel: ObservableObject {
             return moved
         }
         selectedID = nil
+    }
+
+    // MARK: Backdrop
+
+    /// The framing the current image came from, if it sits on a backdrop.
+    private var currentFraming: Framing? {
+        framings.last { $0.framed === base }
+    }
+
+    var hasBackdrop: Bool { currentFraming != nil }
+
+    /// Sets the image on a backdrop with rounded corners and a shadow, or
+    /// removes the backdrop when `backdrop` is nil. Returns false when the
+    /// result would be too large to build.
+    @discardableResult
+    func setBackdrop(_ backdrop: Backdrop?) -> Bool {
+        // Work from the image as it was before any backdrop.
+        var source = base
+        var shift: CGFloat = 0
+        if let current = currentFraming {
+            source = current.source
+            shift = -current.inset
+        }
+
+        guard let backdrop else {
+            guard shift != 0 else { return true }
+            checkpoint()
+            base = source
+            shiftAnnotations(by: shift)
+            return true
+        }
+
+        let shorter = CGFloat(min(source.width, source.height))
+        let inset = min(max(shorter * 0.09, 36 * scale), 140 * scale).rounded()
+        guard let framed = Self.compose(source, on: backdrop, inset: inset, scale: scale) else { return false }
+        checkpoint()
+        base = framed
+        shiftAnnotations(by: shift + inset)
+        framings.append(Framing(source: source, framed: framed, inset: inset))
+        if framings.count > 8 { framings.removeFirst() }
+        return true
+    }
+
+    private func shiftAnnotations(by distance: CGFloat) {
+        annotations = annotations.map { annotation in
+            var moved = annotation
+            moved.translate(dx: distance, dy: distance)
+            return moved
+        }
+        selectedID = nil
+    }
+
+    private static func compose(_ image: CGImage, on backdrop: Backdrop, inset: CGFloat, scale: CGFloat) -> CGImage? {
+        let pad = Int(inset)
+        let width = image.width + pad * 2
+        let height = image.height + pad * 2
+        guard width <= ImageEngine.maxPixels / max(1, height),
+              let context = makeContext(width: width, height: height, like: image) else { return nil }
+
+        let full = CGRect(x: 0, y: 0, width: width, height: height)
+        let spot = CGRect(x: pad, y: pad, width: image.width, height: image.height)
+        let radius = min(14 * scale, CGFloat(min(image.width, image.height)) / 6)
+        let card = NSBezierPath(roundedRect: spot, xRadius: radius, yRadius: radius).cgPath
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+        NSGradient(starting: backdrop.colors.start, ending: backdrop.colors.end)?.draw(in: full, angle: -45)
+        NSGraphicsContext.restoreGraphicsState()
+
+        // A soft shadow under the screenshot.
+        context.saveGState()
+        context.setShadow(
+            offset: CGSize(width: 0, height: -inset * 0.16),
+            blur: inset * 0.55,
+            color: CGColor(gray: 0, alpha: 0.36)
+        )
+        context.addPath(card)
+        context.setFillColor(CGColor(gray: 1, alpha: 1))
+        context.fillPath()
+        context.restoreGState()
+
+        // The screenshot itself, clipped to the rounded card.
+        context.saveGState()
+        context.addPath(card)
+        context.clip()
+        context.interpolationQuality = .high
+        context.draw(image, in: spot)
+        context.restoreGState()
+
+        return context.makeImage()
     }
 
     func undo() {
