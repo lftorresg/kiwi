@@ -54,6 +54,8 @@ Kiwi opens a short setup guide:
 | ⇧⌘6 | Scrolling capture. Pick the area, scroll, then press Done or ⇧⌘6 again. |
 | ⇧⌘2 | Open the last capture in the editor |
 
+These are the defaults. Change any of them in Settings → Shortcuts: click the shortcut and press the new keys.
+
 **Capture After Delay** in the menu lets you pick the area first and captures it 3, 5 or 10 seconds later, which leaves time to open a menu or hover over something.
 
 ## After a capture
