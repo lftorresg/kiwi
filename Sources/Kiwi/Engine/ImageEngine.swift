@@ -270,6 +270,12 @@ enum ImageEngine {
         return output
     }
 
+    /// The image's pixels, the right way up, after the size check. For reading text.
+    static func loadUpright(_ url: URL) throws -> CGImage {
+        let source = try openSource(url)
+        return try decodeUpright(source, name: url.lastPathComponent)
+    }
+
     /// A copy with all metadata removed: location, camera, software, timestamps, comments.
     /// The pixels are re-encoded, so lossy formats lose a little quality.
     @discardableResult

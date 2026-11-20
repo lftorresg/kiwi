@@ -13,6 +13,7 @@ enum WheelAction {
     case copyPath
     case reveal
     case checksum
+    case copyText
     case share
 }
 
@@ -71,6 +72,7 @@ enum WheelRing: String {
                 WheelItem(id: "path", title: "Copy path", symbol: "link", action: .copyPath),
                 WheelItem(id: "reveal", title: "Reveal", symbol: "folder", action: .reveal),
                 WheelItem(id: "sha", title: "SHA-256", symbol: "number", action: .checksum),
+                WheelItem(id: "text", title: "Copy text", symbol: "text.viewfinder", action: .copyText),
                 WheelItem(id: "share", title: "Share", symbol: "square.and.arrow.up", action: .share),
             ]
         }

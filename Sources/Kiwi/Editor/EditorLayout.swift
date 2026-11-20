@@ -25,11 +25,11 @@ enum EditorLayout {
 
     static let minimumWindowSize = NSSize(width: 520, height: 500)
     /// Width the editor opens at when the image itself is small.
-    static let comfortableWidth: CGFloat = 1060
+    static let comfortableWidth: CGFloat = 1100
 
     static func top(forWidth width: CGFloat) -> Top {
-        if width >= 1040 { return .full }
-        if width >= 900 { return .medium }
+        if width >= 1080 { return .full }
+        if width >= 940 { return .medium }
         return .stacked
     }
 

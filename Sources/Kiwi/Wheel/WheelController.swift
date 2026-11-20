@@ -213,6 +213,9 @@ enum WheelRunner {
         case .checksum:
             checksum(urls)
 
+        case .copyText:
+            copyText(from: urls)
+
         case .edit:
             guard let first = urls.first(where: ImageEngine.isImage) else {
                 Toast.error("Edit works with images")
@@ -258,6 +261,33 @@ enum WheelRunner {
             Toast.show("Looking for sensitive text…", symbol: "eye.slash")
             process(urls, verb: "Redacted", suffix: "") { url in
                 try ImageEngine.redact(url, options: options).url
+            }
+        }
+    }
+
+    /// Reads the text in every image and copies it, images separated by a blank line.
+    private static func copyText(from urls: [URL]) {
+        let images = urls.filter(ImageEngine.isImage)
+        guard !images.isEmpty else {
+            Toast.error("Copy text works with images")
+            return
+        }
+        Toast.show("Reading text…", symbol: "text.viewfinder")
+        DispatchQueue.global(qos: .userInitiated).async {
+            var parts: [String] = []
+            for url in images {
+                if let image = try? ImageEngine.loadUpright(url), let text = try? TextReader.read(image), !text.isEmpty {
+                    parts.append(text)
+                }
+            }
+            let text = parts.joined(separator: "\n\n")
+            Task { @MainActor in
+                guard !text.isEmpty else {
+                    Toast.show("No text found", symbol: "text.viewfinder")
+                    return
+                }
+                Clipboard.copy(text: text)
+                Toast.show("Copied the text", symbol: "doc.on.doc.fill")
             }
         }
     }
