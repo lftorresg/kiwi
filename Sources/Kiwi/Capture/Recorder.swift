@@ -13,6 +13,8 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
 
     private(set) var isRecording = false
     private(set) var startedAt: Date?
+    /// The most recent finished recording of this session.
+    private(set) var lastURL: URL?
 
     private var isBusy = false
     private var didFinishWriting = false
@@ -107,6 +109,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
                 Toast.error("The recording could not be saved")
                 return
             }
+            self.lastURL = url
             let thumbnail = await Self.thumbnail(for: url)
             PreviewHUD.shared.showRecording(at: url, thumbnail: thumbnail, on: screen)
         }

@@ -87,6 +87,8 @@ Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches ea
 
 Recordings are MP4 at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio is optional and off by default. Kiwi does not use the microphone. The red outline and Kiwi's own windows never appear in the video.
 
+**GIF.** The preview that appears after a recording has a GIF button, and the menu has *Make GIF of Last Recording*. The GIF is written next to the video and loops. To keep the file reasonable it is at most 640 px on its longest side and 180 frames: 12 frames a second for clips up to 15 seconds, fewer for longer ones.
+
 ## Editor
 
 | Key | Tool | Key | Tool |

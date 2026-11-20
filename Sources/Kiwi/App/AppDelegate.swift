@@ -83,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(menuItem("Record Area", #selector(recordArea), keys: .record, symbol: "record.circle"))
         menu.addItem(menuItem("Record Screen", #selector(recordScreen), symbol: "menubar.dock.rectangle"))
+        menu.addItem(menuItem("Make GIF of Last Recording", #selector(gifLast), symbol: "photo.stack"))
         menu.addItem(.separator())
         menu.addItem(menuItem("Edit Last Capture", #selector(editLast), keys: .editLast, symbol: "pencil.tip.crop.circle"))
         menu.addItem(menuItem("Pin Last Capture", #selector(pinLast), symbol: "pin"))
@@ -251,6 +252,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func recordArea() { CaptureController.shared.toggleRecording() }
     @objc private func recordScreen() { CaptureController.shared.recordScreen() }
     @objc private func stopRecording() { RecordingController.shared.stop() }
+    @objc private func gifLast() { CaptureController.shared.makeGIFOfLastRecording() }
     @objc private func editLast() { CaptureController.shared.editLast() }
     @objc private func pinLast() { CaptureController.shared.pinLast() }
     @objc private func openFolder() { CaptureController.shared.revealSaveFolder() }
