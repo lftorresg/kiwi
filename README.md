@@ -68,7 +68,9 @@ Kiwi opens a short setup guide:
 - **Automatically:** turn on *Redact every capture* in Settings. The scan runs before anything is copied or saved. If it fails, nothing is copied.
 - **On files:** drop images on the wheel's Redact slice for a redacted copy.
 
-What it looks for: email addresses, phone numbers, payment cards (Luhn-checked), CPF and SSN, AWS/GitHub/GitLab/Slack/Stripe/Google/OpenAI-style keys, JWTs, bearer tokens, private key headers, `password=` style assignments, long hex and random strings, IPv4/IPv6 and MAC addresses, and optionally faces. Each category can be switched off.
+After a scan, Kiwi says what it covered ("2 emails, 1 ID number") and outlines the new boxes for a few seconds so you can check them.
+
+What it looks for: email addresses, phone numbers, payment cards (Luhn-checked), CPF, RG, CNPJ, CNH, PIS, voter ID, passport and SSN, AWS/GitHub/GitLab/Slack/Stripe/Google/OpenAI-style keys, JWTs, bearer tokens, private key headers, `password=` style assignments, long hex and random strings, IPv4/IPv6 and MAC addresses, and optionally faces. Each category can be switched off.
 
 Detection is best effort. Look at the result before you share it.
 
@@ -97,6 +99,7 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles. 
 | --- | --- |
 | Return | Copy the result and close |
 | ⌘R | Auto-redact |
+| ⇧⌘C | Copy the text in the image |
 | ⌘C / ⌘S / ⇧⌘S | Copy / Save / Save As |
 | Convert menu | Save the edited image as PNG, JPEG, HEIC, AVIF, TIFF or PDF |
 | ⌘Z / ⇧⌘Z | Undo / Redo |
@@ -116,7 +119,7 @@ While dragging one or more files:
 | --- | --- | --- |
 | ⇧ | Convert | PNG, JPEG, HEIC, AVIF, TIFF, PDF |
 | ⌘ | Tools | Half size, Fit 1920, Compress, Strip info, Redact, Edit |
-| ⌃ | Actions | Copy, Copy path, Reveal, SHA-256, Share |
+| ⌃ | Actions | Copy, Copy path, Reveal, SHA-256, Copy text, Share |
 
 Drop on a slice to run it. Drop on the hub, or anywhere outside the wheel, to cancel. Keys that were already held when the drag began are ignored.
 

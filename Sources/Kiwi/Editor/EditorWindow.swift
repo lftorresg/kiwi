@@ -45,6 +45,7 @@ enum EditorCommand {
     case export(ImageFormat)
     case zoomIn, zoomOut, zoomFit, zoomActual
     case rename
+    case copyText
 }
 
 /// Window that turns Command-key shortcuts into editor commands.
@@ -95,6 +96,7 @@ final class EditorWindow: NSWindow {
         let command: EditorCommand?
         switch (event.charactersIgnoringModifiers?.lowercased() ?? "", shift) {
         case ("c", false): command = .copy
+        case ("c", true): command = .copyText
         case ("s", false): command = .save
         case ("s", true): command = .saveAs
         case ("z", false): command = .undo
@@ -251,6 +253,8 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             window.close()
         case .autoRedact:
             autoRedact()
+        case .copyText:
+            copyText()
         case .rename:
             // Return in the name field: hand the keyboard back to the canvas.
             window.makeFirstResponder(canvas)
@@ -267,6 +271,28 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             canvas.zoomToFit()
         case .zoomActual:
             canvas.zoomToActualSize()
+        }
+    }
+
+    /// Copies the text in the image to the clipboard. It reads the image as it
+    /// will be exported, so anything under a redaction box is not copied.
+    private func copyText() {
+        let image = model.rendered()
+        Toast.show("Reading text…", symbol: "text.viewfinder")
+        DispatchQueue.global(qos: .userInitiated).async {
+            let outcome: Result<String, Error> = Result { try TextReader.read(image) }
+            Task { @MainActor in
+                switch outcome {
+                case .success(let text) where text.isEmpty:
+                    Toast.show("No text found", symbol: "text.viewfinder")
+                case .success(let text):
+                    Clipboard.copy(text: text)
+                    let count = text.split(separator: "\n").count
+                    Toast.show("Copied \(count) \(count == 1 ? "line" : "lines") of text", symbol: "doc.on.doc.fill")
+                case .failure:
+                    Toast.error("Couldn't read the text")
+                }
+            }
         }
     }
 
@@ -483,6 +509,7 @@ private struct EditorRootView: View {
             historyButtons
             separator
             redactButton(showLabel: redactLabel)
+            textButton
             separator
             zoomControls
         }
@@ -507,12 +534,24 @@ private struct EditorRootView: View {
             historyButtons
             separator
             redactButton(showLabel: false)
+            textButton
             separator
             zoomControls
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
         .glassEffect(.regular, in: .capsule)
+    }
+
+    private var textButton: some View {
+        Button { perform(.copyText) } label: {
+            Image(systemName: "text.viewfinder")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Copy the text in this image (⇧⌘C)")
     }
 
     private var separator: some View {
