@@ -38,7 +38,7 @@ final class HotKeyCenter: @unchecked Sendable {
         )
         guard status == noErr else { return false }
         handlers[id] = handler
-        references.append(unsafe UInt(bitPattern: reference))
+        references.append(UInt(bitPattern: reference))
         return true
     }
 
