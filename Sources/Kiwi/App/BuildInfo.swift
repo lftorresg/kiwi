@@ -2,5 +2,5 @@
 /// It is bumped with every set of changes, so it is easy to tell whether the
 /// app that is running is the one that was just built.
 enum BuildInfo {
-    static let label = "0.7 · build 11"
+    static let label = "1.0 · build 12"
 }

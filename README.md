@@ -16,7 +16,7 @@ Kiwi lives in the menu bar.
 
 **Redact.** One click finds emails, phone numbers, card numbers, IDs, keys and tokens, and addresses, and covers them with solid boxes. Kiwi can do it automatically before a capture ever reaches the clipboard.
 
-**Scroll and record.** ⇧⌘6 stitches a page while you scroll. ⇧⌘5 records an area to MP4.
+**Scroll and record.** ⇧⌘6 stitches a page while you scroll. ⇧⌘5 records an area to MP4, with a GIF one click away.
 
 **The wheel.** Start dragging files in Finder, tap ⇧, ⌘ or ⌃, and a glass wheel opens under the pointer. Drop on a slice to convert images, video, audio, PDFs and documents, or to resize, compress, redact, rename, zip, hash or share.
 
@@ -77,7 +77,7 @@ After a scan, Kiwi says what it covered ("2 emails, 1 ID number") and outlines t
 
 What it looks for: email addresses, phone numbers, payment cards (Luhn-checked), CPF, RG, CNPJ, CNH, PIS, voter ID, passport and SSN, AWS/GitHub/GitLab/Slack/Stripe/Google/OpenAI-style keys, JWTs, bearer tokens, private key headers, `password=` style assignments, long hex and random strings, IPv4/IPv6 and MAC addresses, and optionally faces. Each category can be switched off.
 
-Detection is best effort. Look at the result before you share it.
+Detection is best effort. Look at the result before you share it. One known gap: a Brazilian RG or CNH written as bare digits, with no label such as "RG" or "CNH" near it, is not recognised, because nothing distinguishes it from any other number.
 
 ## Scrolling capture
 
@@ -166,13 +166,13 @@ With the default signing (the local `Kiwi Local` identity, or ad hoc) the result
 
 ```
 Sources/Kiwi/
-  App/        entry point, menu bar item, hotkeys, preferences
-  Capture/    selection overlay, grabber, scrolling capture, recorder, preview
+  App/        entry point, menu bar item, hotkeys and shortcuts, preferences
+  Capture/    selection overlay, grabber, scrolling capture, recorder, preview, pins
   Redaction/  sensitive-text patterns and the on-device scanner
-  Editor/     annotation model and renderer, canvas, editor window
+  Editor/     annotation model and renderer, canvas, backdrops, editor window
   Wheel/      drag watcher, wheel model and view, drop handling
-  Engine/     image conversion on ImageIO, checksums
-  UI/         shared panels, toast, settings, setup guide
+  Engine/     image, video, audio, PDF and document conversion, GIF, ZIP, checksums
+  UI/         shared panels, toast, progress panel, settings, shortcut recorder, setup guide
 Resources/    Info.plist, entitlements, app icon
 scripts/      verify.sh, setup-signing.sh, release.sh
 ```
