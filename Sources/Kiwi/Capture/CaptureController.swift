@@ -9,6 +9,13 @@ final class CaptureController {
     private let selection = SelectionController()
     private(set) var last: Capture?
 
+    /// The latest screenshots of this session, newest first. They live in the
+    /// cache, so the list is empty again after Kiwi quits.
+    private(set) var recents: [RecentCapture] = []
+    /// Called whenever the recent list changes.
+    var onRecentsChange: (() -> Void)?
+    private let recentLimit = 12
+
     /// Called when a capture is attempted without Screen Recording permission.
     var onNeedsSetup: (() -> Void)?
 
@@ -186,6 +193,7 @@ final class CaptureController {
         let prefs = Prefs.shared
         let capture = Capture(image: image, scale: scale)
         last = capture
+        remember(capture)
         if prefs.editAfterCapture {
             PreviewHUD.shared.dismiss(animated: false)
             EditorCoordinator.shared.open(capture)
@@ -263,6 +271,10 @@ final class CaptureController {
                 if failed {
                     Toast.error("Couldn't save to \(folder.lastPathComponent)")
                 }
+                // Keep the recent list in step with edits, renames and saves.
+                if self.recents.contains(where: { $0.id == capture.id }) {
+                    self.remember(capture)
+                }
                 completion?(saved)
             }
         }
@@ -326,6 +338,9 @@ final class CaptureController {
             }
         }
         capture.name = name
+        if recents.contains(where: { $0.id == capture.id }) {
+            remember(capture)
+        }
         return name
     }
 
@@ -345,8 +360,67 @@ final class CaptureController {
         }
         Clipboard.clear(ifStampIs: capture.clipboardStamp)
         if last === capture { last = nil }
+        forget(capture.id)
         PreviewHUD.shared.dismiss(ifShowing: capture)
         Toast.show("Deleted", symbol: "trash.fill")
+    }
+
+    // MARK: Recent captures
+
+    /// Adds a screenshot to the recent list, or refreshes its entry and moves it to the top.
+    private func remember(_ capture: Capture) {
+        guard capture.isScreenshot, !capture.isDeleted else { return }
+        let small = capture.image.downscaled(maxPixel: 96)
+        let longest = CGFloat(max(small.width, small.height, 1))
+        let fit = 32 / longest
+        let thumbnail = NSImage(
+            cgImage: small,
+            size: NSSize(width: CGFloat(small.width) * fit, height: CGFloat(small.height) * fit)
+        )
+        let record = RecentCapture(
+            id: capture.id,
+            name: capture.name,
+            cacheURL: capture.cacheURL,
+            savedURL: capture.savedURL,
+            scale: capture.scale,
+            thumbnail: thumbnail
+        )
+        recents.removeAll { $0.id == capture.id }
+        recents.insert(record, at: 0)
+        while recents.count > recentLimit {
+            let dropped = recents.removeLast()
+            // An editor that is still open keeps using its working copy.
+            if EditorCoordinator.shared.openCapture(withID: dropped.id) == nil {
+                try? FileManager.default.removeItem(at: dropped.cacheURL)
+            }
+        }
+        onRecentsChange?()
+    }
+
+    private func forget(_ id: UUID) {
+        guard recents.contains(where: { $0.id == id }) else { return }
+        recents.removeAll { $0.id == id }
+        onRecentsChange?()
+    }
+
+    /// Opens a recent capture in the editor again.
+    func reopen(_ id: UUID) {
+        guard let record = recents.first(where: { $0.id == id }) else { return }
+        if let last, last.id == id {
+            edit(last)
+            return
+        }
+        if let open = EditorCoordinator.shared.openCapture(withID: id) {
+            edit(open)
+            return
+        }
+        guard let source = CGImageSourceCreateWithURL(record.cacheURL as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            forget(id)
+            Toast.error("That capture is no longer available")
+            return
+        }
+        edit(Capture(reopening: record, image: image))
     }
 
     func revealSaveFolder() {

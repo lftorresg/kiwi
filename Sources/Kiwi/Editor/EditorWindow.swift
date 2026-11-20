@@ -23,6 +23,11 @@ final class EditorCoordinator {
         controller.show()
     }
 
+    /// The capture with this id, if an editor window is showing it.
+    func openCapture(withID id: UUID) -> Capture? {
+        controllers.first { $0.capture.id == id }?.capture
+    }
+
     /// Opens an image file from disk, for example one dropped on the wheel.
     func open(fileURL: URL) {
         guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil),

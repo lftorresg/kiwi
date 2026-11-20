@@ -10,7 +10,7 @@ final class Capture {
         case file(URL)
     }
 
-    let id = UUID()
+    let id: UUID
     let origin: Origin
     let scale: CGFloat
     /// File name without extension. Starts as a timestamp; the user can rename it.
@@ -26,11 +26,23 @@ final class Capture {
     var isDeleted = false
 
     init(image: CGImage, scale: CGFloat, origin: Origin = .screenshot) {
+        self.id = UUID()
         self.image = image
         self.scale = scale
         self.origin = origin
         self.name = CaptureStore.makeName()
         self.cacheURL = CaptureStore.cacheDirectory.appendingPathComponent(name + ".png")
+    }
+
+    /// Re-opens a screenshot from this session using its working copy.
+    init(reopening record: RecentCapture, image: CGImage) {
+        self.id = record.id
+        self.image = image
+        self.scale = record.scale
+        self.origin = .screenshot
+        self.name = record.name
+        self.cacheURL = record.cacheURL
+        self.savedURL = record.savedURL
     }
 
     var isScreenshot: Bool {
@@ -41,6 +53,17 @@ final class Capture {
     var pointSize: CGSize {
         CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale)
     }
+}
+
+/// A light entry in the recent captures list: enough to show it in a menu and
+/// to open it again. The full image stays in the cache file, not in memory.
+struct RecentCapture {
+    let id: UUID
+    var name: String
+    var cacheURL: URL
+    var savedURL: URL?
+    let scale: CGFloat
+    let thumbnail: NSImage
 }
 
 /// File handling for captures. Everything here is safe to call off the main thread.
