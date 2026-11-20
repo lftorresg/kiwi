@@ -312,7 +312,9 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         Toast.show("Looking for sensitive text…", symbol: "eye.slash")
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let outcome: Result<[CGRect], Error> = Result { try PIIScanner.scan(image, options: options) }
+            let outcome: Result<[PIIScanner.Finding], Error> = Result {
+                try PIIScanner.findings(in: image, options: options)
+            }
             Task { @MainActor in
                 self.isScanning = false
                 guard self.model.base === image else {
@@ -320,11 +322,17 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
                     return
                 }
                 switch outcome {
-                case .success(let rects) where rects.isEmpty:
+                case .success(let findings) where findings.isEmpty:
                     Toast.show("Nothing sensitive found", symbol: "checkmark.shield.fill")
-                case .success(let rects):
-                    self.model.addRedactions(rects)
-                    Toast.show("Covered \(rects.count) \(rects.count == 1 ? "item" : "items")", symbol: "eye.slash.fill")
+                case .success(let findings):
+                    let added = Set(self.model.addRedactions(findings.map(\.rect)))
+                    Toast.show("Covered \(PIIScanner.summary(of: findings))", symbol: "eye.slash.fill")
+                    // Outline the new boxes for a few seconds so they are easy to check.
+                    self.model.flashIDs = added
+                    after(4) { [weak self] in
+                        guard let self, self.model.flashIDs == added else { return }
+                        self.model.flashIDs = []
+                    }
                 case .failure:
                     Toast.error("Couldn't scan the image")
                 }

@@ -145,7 +145,7 @@ final class CaptureController {
 
     private enum RedactionOutcome {
         case off
-        case done(Int)
+        case done(count: Int, summary: String)
         case failed
     }
 
@@ -164,16 +164,16 @@ final class CaptureController {
         let options = prefs.redactOptions
         let displayID = screen?.displayID
         DispatchQueue.global(qos: .userInitiated).async {
-            let outcome: Result<(image: CGImage, count: Int), Error> = Result {
-                let rects = try PIIScanner.scan(image, options: options)
-                let redacted = try PIIScanner.apply(rects, to: image)
-                return (redacted, rects.count)
+            let outcome: Result<(image: CGImage, count: Int, summary: String), Error> = Result {
+                let findings = try PIIScanner.findings(in: image, options: options)
+                let redacted = try PIIScanner.apply(findings.map(\.rect), to: image)
+                return (redacted, findings.count, PIIScanner.summary(of: findings))
             }
             Task { @MainActor in
                 let screen = NSScreen.matching(displayID)
                 switch outcome {
                 case .success(let value):
-                    self.deliver(image: value.image, scale: scale, screen: screen, redaction: .done(value.count))
+                    self.deliver(image: value.image, scale: scale, screen: screen, redaction: .done(count: value.count, summary: value.summary))
                 case .failure(let error):
                     NSLog("Kiwi: auto-redact failed: %@", error.localizedDescription)
                     self.deliver(image: image, scale: scale, screen: screen, redaction: .failed)
@@ -196,10 +196,10 @@ final class CaptureController {
         switch redaction {
         case .off:
             persist(capture, copy: prefs.copyOnCapture, save: prefs.saveOnCapture)
-        case .done(let count):
+        case .done(let count, let summary):
             persist(capture, copy: prefs.copyOnCapture, save: prefs.saveOnCapture)
             if count > 0 {
-                Toast.show("Redacted \(count) \(count == 1 ? "item" : "items")", symbol: "eye.slash.fill")
+                Toast.show("Redacted \(summary)", symbol: "eye.slash.fill")
             }
         case .failed:
             // Fail closed: an unredacted image is never copied or saved automatically.

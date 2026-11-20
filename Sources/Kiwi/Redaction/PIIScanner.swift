@@ -18,11 +18,22 @@ enum PIIScanner {
     private static let bandHeight = 3200
     private static let bandOverlap = 320
 
-    /// Returns rectangles to cover, in image pixels with a top-left origin.
+    /// One thing to cover: where it is (image pixels, top-left origin) and what it is.
+    struct Finding {
+        let rect: CGRect
+        let label: String
+    }
+
+    /// Rectangles to cover, in image pixels with a top-left origin.
     static func scan(_ image: CGImage, options: Options) throws -> [CGRect] {
+        try findings(in: image, options: options).map(\.rect)
+    }
+
+    /// Everything sensitive found in the image, with what each item is.
+    static func findings(in image: CGImage, options: Options) throws -> [Finding] {
         guard !options.categories.isEmpty || options.faces else { return [] }
 
-        var found: [CGRect] = []
+        var found: [Finding] = []
         if image.height <= bandHeight + bandOverlap {
             found = try scanBand(image, offsetY: 0, options: options)
         } else {
@@ -42,7 +53,22 @@ enum PIIScanner {
         return deduplicated(found)
     }
 
-    private static func scanBand(_ image: CGImage, offsetY: CGFloat, options: Options) throws -> [CGRect] {
+    /// "2 emails, 1 ID number": a one-line account of what was found.
+    static func summary(of findings: [Finding]) -> String {
+        var order: [String] = []
+        var counts: [String: Int] = [:]
+        for finding in findings {
+            if counts[finding.label] == nil { order.append(finding.label) }
+            counts[finding.label, default: 0] += 1
+        }
+        return order.map { label in
+            let count = counts[label] ?? 0
+            if count == 1 { return "1 \(label)" }
+            return "\(count) \(label.hasSuffix("s") ? label + "es" : label + "s")"
+        }.joined(separator: ", ")
+    }
+
+    private static func scanBand(_ image: CGImage, offsetY: CGFloat, options: Options) throws -> [Finding] {
         let textRequest = VNRecognizeTextRequest()
         textRequest.recognitionLevel = .accurate
         // Language correction "fixes" tokens and addresses into words; keep the raw characters.
@@ -72,7 +98,7 @@ enum PIIScanner {
             return rect.insetBy(dx: -pad, dy: -pad).integral
         }
 
-        var rects: [CGRect] = []
+        var found: [Finding] = []
 
         if !options.categories.isEmpty {
             let wantsIDs = options.categories.contains(.nationalID)
@@ -82,38 +108,42 @@ enum PIIScanner {
                 let text = candidate.string
                 // A caption such as "RG" on one line and the number on the next.
                 if wantsIDs, previousWasIDLabel, PIIDetector.looksLikeIDNumber(text) {
-                    rects.append(pixelRect(observation.boundingBox, padding: 0.1))
+                    let rect = pixelRect(observation.boundingBox, padding: 0.1)
+                    found.append(Finding(rect: rect, label: PIICategory.nationalID.noun))
                 }
                 previousWasIDLabel = PIIDetector.isIDLabel(text)
                 for match in PIIDetector.matches(in: text, categories: options.categories) {
+                    let rect: CGRect
                     if let located = try? candidate.boundingBox(for: match.range) {
-                        rects.append(pixelRect(located.boundingBox, padding: 0.18))
+                        rect = pixelRect(located.boundingBox, padding: 0.18)
                     } else {
                         // Could not locate the exact characters: cover the whole line instead.
-                        rects.append(pixelRect(observation.boundingBox, padding: 0.1))
+                        rect = pixelRect(observation.boundingBox, padding: 0.1)
                     }
+                    found.append(Finding(rect: rect, label: match.category.noun))
                 }
             }
         }
 
         if options.faces {
             for face in faceRequest.results ?? [] {
-                rects.append(pixelRect(face.boundingBox, padding: 0.12))
+                found.append(Finding(rect: pixelRect(face.boundingBox, padding: 0.12), label: "face"))
             }
         }
-        return rects
+        return found
     }
 
-    /// Drops rectangles that are mostly inside one already kept (band overlap finds things twice).
-    private static func deduplicated(_ rects: [CGRect]) -> [CGRect] {
-        var kept: [CGRect] = []
-        for rect in rects where rect.width > 0 && rect.height > 0 {
+    /// Drops findings that are mostly inside one already kept (band overlap finds things twice).
+    private static func deduplicated(_ findings: [Finding]) -> [Finding] {
+        var kept: [Finding] = []
+        for finding in findings where finding.rect.width > 0 && finding.rect.height > 0 {
+            let rect = finding.rect
             let area = rect.width * rect.height
             let duplicate = kept.contains { other in
-                let overlap = other.intersection(rect)
+                let overlap = other.rect.intersection(rect)
                 return !overlap.isNull && (overlap.width * overlap.height) > area * 0.6
             }
-            if !duplicate { kept.append(rect) }
+            if !duplicate { kept.append(finding) }
         }
         return kept
     }

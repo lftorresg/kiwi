@@ -17,6 +17,8 @@ final class EditorModel: ObservableObject {
     @Published private(set) var annotations: [Annotation] = []
     /// The capture's name as typed in the editor's name field.
     @Published var captureName: String
+    /// Annotations to outline for a moment, so new redactions are easy to spot.
+    @Published var flashIDs: Set<UUID> = []
     /// Current zoom of the canvas, for the toolbar readout.
     @Published var zoomPercent = 100
     @Published private(set) var canUndo = false
@@ -87,11 +89,13 @@ final class EditorModel: ObservableObject {
         annotations.append(annotation)
     }
 
-    /// Adds solid redaction boxes as one undoable step.
-    func addRedactions(_ rects: [CGRect]) {
+    /// Adds solid redaction boxes as one undoable step and returns their ids.
+    @discardableResult
+    func addRedactions(_ rects: [CGRect]) -> [UUID] {
         let boxes = rects.map { $0.intersection(pixelBounds) }.filter { !$0.isNull && $0.width > 0 && $0.height > 0 }
-        guard !boxes.isEmpty else { return }
+        guard !boxes.isEmpty else { return [] }
         checkpoint()
+        let firstNew = annotations.count
         for box in boxes {
             annotations.append(Annotation(
                 kind: .redact,
@@ -102,6 +106,7 @@ final class EditorModel: ObservableObject {
                 fontSize: fontSize
             ))
         }
+        return annotations[firstNew...].map(\.id)
     }
 
     // MARK: Editing
