@@ -451,6 +451,14 @@ final class CaptureController {
         edit(Capture(reopening: record, image: image))
     }
 
+    func pinLast() {
+        guard let last else {
+            Toast.show("No capture yet", symbol: "camera.viewfinder")
+            return
+        }
+        PinController.shared.pin(last.image, scale: last.scale)
+    }
+
     func revealSaveFolder() {
         let folder = Prefs.shared.saveFolderURL
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
