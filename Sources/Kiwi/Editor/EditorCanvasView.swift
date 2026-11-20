@@ -362,7 +362,22 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         context.restoreGState()
 
         drawSelectionOutline()
+        drawFlashes(in: context)
         drawCropOverlay(in: rect)
+    }
+
+    /// A bright outline around annotations that were just added automatically.
+    private func drawFlashes(in context: CGContext) {
+        guard !model.flashIDs.isEmpty else { return }
+        context.saveGState()
+        context.setStrokeColor(Theme.kiwiNS.cgColor)
+        context.setLineWidth(2.5)
+        for annotation in model.annotations where model.flashIDs.contains(annotation.id) {
+            let outline = viewRect(for: annotation.bounds).insetBy(dx: -3, dy: -3)
+            context.addPath(NSBezierPath(roundedRect: outline, xRadius: 5, yRadius: 5).cgPath)
+        }
+        context.strokePath()
+        context.restoreGState()
     }
 
     private func drawSelectionOutline() {

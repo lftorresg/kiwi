@@ -23,6 +23,20 @@ enum PIICategory: String, CaseIterable, Identifiable {
     }
 }
 
+extension PIICategory {
+    /// Short singular name used when reporting what was found.
+    var noun: String {
+        switch self {
+        case .email: return "email"
+        case .phone: return "phone number"
+        case .card: return "card number"
+        case .nationalID: return "ID number"
+        case .secret: return "secret"
+        case .network: return "network address"
+        }
+    }
+}
+
 struct PIIMatch {
     let range: Range<String.Index>
     let category: PIICategory
