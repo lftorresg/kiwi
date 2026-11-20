@@ -70,6 +70,11 @@ final class DragWatcher: NSObject {
         // A new drag has started. Only file drags are interesting.
         pasteboardCountAtMouseDown = pasteboard.changeCount
         guard pasteboard.types?.contains(.fileURL) == true else { return }
+        // Drags that start in an app the user excluded are left alone.
+        if let source = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+           Prefs.shared.excludedApps.contains(source) {
+            return
+        }
 
         fileDragActive = true
         // Keys already held when the drag starts are ignored until released.

@@ -141,10 +141,12 @@ Results are written next to the originals with Finder-style names (`photo 2.jpg`
 
 Everything is done with the frameworks that ship with macOS, so the formats are the ones macOS can write: there is no MP3, WebM or MKV output. Documents keep text, fonts, colours, lists and simple tables; complex layouts may shift. Kiwi makes ZIP archives but does not unpack them.
 
+If the wheel gets in the way in some app, add that app under Settings → Drag wheel → *Never show for drags from*.
+
 ## Design notes
 
 - **Light by default.** An AppKit agent with no Dock icon, no background polling and no dependencies. Timers run only during a file drag, a scrolling capture or a recording.
-- **Minimal permissions.** Screen Recording is the only permission Kiwi asks for.
+- **Minimal permissions.** Screen Recording is the only permission Kiwi needs. The microphone is asked for only if you turn on microphone recording.
 - **Native glass.** Floating UI uses the system Liquid Glass material, hosted in non-activating panels so the app you are working in keeps focus. Motion respects Reduce Motion.
 - **Secure by construction.** Hardened runtime, a single entitlement (the optional microphone), no network code, strict memory safety checks, and a verify script that proves it on every build.
 
