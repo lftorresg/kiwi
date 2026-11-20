@@ -6,7 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
     private var recordingTimer: Timer?
-    private var hotKeysRegistered = true
+    private var refusedShortcuts: [ShortcutAction] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMainMenu()
@@ -31,8 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !Prefs.shared.didOnboard || !ScreenGrabber.hasPermission {
             WindowRouter.shared.showSetup()
         }
-        if !hotKeysRegistered {
-            Toast.error("Another app is using ⇧⌘4")
+        if let refused = refusedShortcuts.first, let keys = Prefs.shared.shortcut(for: refused) {
+            Toast.error("Another app is using \(keys.display)")
         }
     }
 
@@ -53,27 +53,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: Hotkeys
 
     private func registerHotKeys() {
-        let modifiers = cmdKey | shiftKey
-        let center = HotKeyCenter.shared
-        let area = center.register(keyCode: kVK_ANSI_4, modifiers: modifiers) {
-            CaptureController.shared.captureArea()
+        refusedShortcuts = ShortcutManager.shared.apply()
+        ShortcutManager.shared.onChange = { [weak self] in
+            self?.rebuildStatusMenu()
         }
-        let screen = center.register(keyCode: kVK_ANSI_3, modifiers: modifiers) {
-            CaptureController.shared.captureScreen()
-        }
-        center.register(keyCode: kVK_ANSI_2, modifiers: modifiers) {
-            CaptureController.shared.editLast()
-        }
-        center.register(keyCode: kVK_ANSI_5, modifiers: modifiers) {
-            CaptureController.shared.toggleRecording()
-        }
-        center.register(keyCode: kVK_ANSI_6, modifiers: modifiers) {
-            CaptureController.shared.captureScrolling()
-        }
-        hotKeysRegistered = area && screen
     }
 
-    // MARK: Menu bar
+    // MARK: Status item
 
     private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -89,16 +75,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         about.isEnabled = false
         menu.addItem(about)
         menu.addItem(.separator())
-        menu.addItem(menuItem("Capture Area", #selector(captureArea), key: "4", symbol: "viewfinder"))
+        menu.addItem(menuItem("Capture Area", #selector(captureArea), keys: .captureArea, symbol: "viewfinder"))
         menu.addItem(menuItem("Capture Window", #selector(captureWindow), symbol: "macwindow"))
-        menu.addItem(menuItem("Capture Screen", #selector(captureScreen), key: "3", symbol: "display"))
-        menu.addItem(menuItem("Scrolling Capture", #selector(captureScrolling), key: "6", symbol: "arrow.down.to.line.compact"))
+        menu.addItem(menuItem("Capture Screen", #selector(captureScreen), keys: .captureScreen, symbol: "display"))
+        menu.addItem(menuItem("Scrolling Capture", #selector(captureScrolling), keys: .captureScrolling, symbol: "arrow.down.to.line.compact"))
         menu.addItem(delayedCaptureItem())
         menu.addItem(.separator())
-        menu.addItem(menuItem("Record Area", #selector(recordArea), key: "5", symbol: "record.circle"))
+        menu.addItem(menuItem("Record Area", #selector(recordArea), keys: .record, symbol: "record.circle"))
         menu.addItem(menuItem("Record Screen", #selector(recordScreen), symbol: "menubar.dock.rectangle"))
         menu.addItem(.separator())
-        menu.addItem(menuItem("Edit Last Capture", #selector(editLast), key: "2", symbol: "pencil.tip.crop.circle"))
+        menu.addItem(menuItem("Edit Last Capture", #selector(editLast), keys: .editLast, symbol: "pencil.tip.crop.circle"))
         menu.addItem(menuItem("Pin Last Capture", #selector(pinLast), symbol: "pin"))
         menu.addItem(recentCapturesItem())
         menu.addItem(menuItem("Open Screenshots Folder", #selector(openFolder), symbol: "folder"))
@@ -187,7 +173,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             image?.isTemplate = false
             button.image = image
             button.imagePosition = .imageLeading
-            button.toolTip = "Stop recording (⇧⌘5)"
+            if let keys = Prefs.shared.shortcut(for: .record) {
+                button.toolTip = "Stop recording (\(keys.display))"
+            } else {
+                button.toolTip = "Stop recording"
+            }
             button.target = self
             button.action = #selector(stopRecording)
             updateRecordingTitle()
@@ -210,11 +200,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         button.title = " \(minutes):\(seconds < 10 ? "0" : "")\(seconds)"
     }
 
-    private func menuItem(_ title: String, _ action: Selector, key: String = "", symbol: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+    /// `keys` names the global shortcut to show beside the item, if it has one.
+    private func menuItem(
+        _ title: String, _ action: Selector, keys: ShortcutAction? = nil, symbol: String
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
-        if !key.isEmpty {
-            item.keyEquivalentModifierMask = [.command, .shift]
+        if let keys, let shortcut = Prefs.shared.shortcut(for: keys) {
+            item.keyEquivalent = shortcut.menuKey
+            item.keyEquivalentModifierMask = shortcut.menuModifiers
         }
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         return item

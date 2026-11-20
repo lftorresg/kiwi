@@ -169,7 +169,7 @@ struct SettingsView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Toggle("Record system audio", isOn: $prefs.recordSystemAudio)
-            Text("Recordings are saved as MP4 in the same folder as screenshots. Stop from the menu bar or with ⇧⌘5.")
+            Text(verbatim: recordingHint)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -199,16 +199,26 @@ struct SettingsView: View {
 
     private var shortcutsSection: some View {
         Section("Shortcuts") {
-            shortcutRow("Capture area or window", "⇧⌘4")
-            shortcutRow("Capture full screen", "⇧⌘3")
-            shortcutRow("Record area (press again to stop)", "⇧⌘5")
-            shortcutRow("Scrolling capture", "⇧⌘6")
-            shortcutRow("Edit last capture", "⇧⌘2")
+            ForEach(ShortcutAction.allCases) { action in
+                LabeledContent(action.title) {
+                    ShortcutRecorder(action: action, shortcut: prefs.shortcut(for: action))
+                        .frame(width: 150, height: 26)
+                }
+            }
+            Text("Click a shortcut, then press the new keys. Esc cancels and ⌫ removes the shortcut.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Button("Restore default shortcuts") { ShortcutManager.shared.restoreDefaults() }
             Button("Turn off the macOS shortcuts…") { SystemLinks.openKeyboardSettings() }
             Text("In Keyboard, open Keyboard Shortcuts, pick Screenshots, and untick the ⇧⌘3, ⇧⌘4 and ⇧⌘5 rows so they reach Kiwi.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var recordingHint: String {
+        let keys = prefs.shortcut(for: .record).map { " or with \($0.display)" } ?? ""
+        return "Recordings are saved as MP4 in the same folder as screenshots. Stop from the menu bar\(keys)."
     }
 
     private var systemSection: some View {
@@ -241,14 +251,6 @@ struct SettingsView: View {
                 }
             }
         )
-    }
-
-    private func shortcutRow(_ title: String, _ keys: String) -> some View {
-        LabeledContent(title) {
-            Text(keys)
-                .font(.system(.body, design: .rounded).weight(.medium))
-                .foregroundStyle(.secondary)
-        }
     }
 
     private func chooseFolder() {

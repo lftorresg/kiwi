@@ -22,6 +22,7 @@ final class Prefs: ObservableObject {
         static let recordSystemAudio = "recordSystemAudio"
         static let editAfterCapture = "editAfterCapture"
         static let recordHEVC = "recordHEVC"
+        static let shortcuts = "shortcuts"
     }
 
     @Published var copyOnCapture: Bool {
@@ -80,6 +81,44 @@ final class Prefs: ObservableObject {
         didSet { UserDefaults.standard.set(editAfterCapture, forKey: Key.editAfterCapture) }
     }
 
+    /// Global shortcuts, keyed by `ShortcutAction` raw value.
+    /// An action without an entry has no shortcut.
+    @Published var shortcuts: [String: Shortcut] {
+        didSet { UserDefaults.standard.set(Prefs.encode(shortcuts), forKey: Key.shortcuts) }
+    }
+
+    func shortcut(for action: ShortcutAction) -> Shortcut? {
+        shortcuts[action.rawValue]
+    }
+
+    func setShortcut(_ shortcut: Shortcut?, for action: ShortcutAction) {
+        shortcuts[action.rawValue] = shortcut
+    }
+
+    private static func encode(_ shortcuts: [String: Shortcut]) -> [String: Any] {
+        var stored: [String: Any] = [:]
+        for action in ShortcutAction.allCases {
+            // "off" records that the user removed a shortcut, so the default does not come back.
+            let off: [String: Any] = ["off": true]
+            stored[action.rawValue] = shortcuts[action.rawValue]?.propertyList ?? off
+        }
+        return stored
+    }
+
+    private static func decodeShortcuts(_ stored: [String: Any]) -> [String: Shortcut] {
+        var shortcuts: [String: Shortcut] = [:]
+        for action in ShortcutAction.allCases {
+            guard let entry = stored[action.rawValue] as? [String: Any] else {
+                shortcuts[action.rawValue] = action.defaultShortcut
+                continue
+            }
+            if entry["off"] as? Bool == true { continue }
+            // An entry that cannot be read falls back to the default.
+            shortcuts[action.rawValue] = Shortcut(propertyList: entry) ?? action.defaultShortcut
+        }
+        return shortcuts
+    }
+
     var saveFolderURL: URL { URL(fileURLWithPath: saveFolder, isDirectory: true) }
 
     var redactOptions: PIIScanner.Options {
@@ -128,5 +167,6 @@ final class Prefs: ObservableObject {
         recordSystemAudio = defaults.bool(forKey: Key.recordSystemAudio)
         editAfterCapture = defaults.bool(forKey: Key.editAfterCapture)
         recordHEVC = defaults.bool(forKey: Key.recordHEVC)
+        shortcuts = Prefs.decodeShortcuts(defaults.dictionary(forKey: Key.shortcuts) ?? [:])
     }
 }

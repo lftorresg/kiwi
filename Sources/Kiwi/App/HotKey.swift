@@ -5,12 +5,15 @@ import Carbon.HIToolbox
 /// This path needs no Accessibility or Input Monitoring permission.
 ///
 /// Carbon is a C API, so the calls below are marked `unsafe`. Kiwi passes it
-/// only stack values and never stores, dereferences or frees what it returns:
-/// hotkeys stay registered for the life of the process.
+/// only stack values. The handle Carbon returns for each hotkey is opaque:
+/// Kiwi keeps it as a plain number, never dereferences or frees it, and only
+/// hands it back to Carbon to unregister that hotkey.
 final class HotKeyCenter: @unchecked Sendable {
     static let shared = HotKeyCenter()
 
     private var handlers: [UInt32: () -> Void] = [:]
+    /// Carbon's handles for the registered hotkeys, kept as bit patterns.
+    private var references: [UInt] = []
     private var nextID: UInt32 = 1
     private var installed = false
 
@@ -35,7 +38,20 @@ final class HotKeyCenter: @unchecked Sendable {
         )
         guard status == noErr else { return false }
         handlers[id] = handler
+        references.append(unsafe UInt(bitPattern: reference))
         return true
+    }
+
+    /// Removes every hotkey, so a new set can be registered.
+    func unregisterAll() {
+        for bits in references where bits != 0 {
+            let status = unsafe UnregisterEventHotKey(EventHotKeyRef(bitPattern: bits))
+            if status != noErr {
+                NSLog("Kiwi: could not unregister a hotkey (%d)", status)
+            }
+        }
+        references.removeAll()
+        handlers.removeAll()
     }
 
     fileprivate func fire(_ id: UInt32) {
