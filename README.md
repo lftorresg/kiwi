@@ -85,7 +85,7 @@ Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches ea
 
 ## Recording
 
-Recordings are MP4 at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio is optional and off by default. Kiwi does not use the microphone. The red outline and Kiwi's own windows never appear in the video.
+Recordings are MP4 (MOV when the microphone is on) at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio and the microphone are both optional and off by default. The first time you turn the microphone on, macOS asks for permission. The red outline and Kiwi's own windows never appear in the video.
 
 **GIF.** The preview that appears after a recording has a GIF button, and the menu has *Make GIF of Last Recording*. The GIF is written next to the video and loops. To keep the file reasonable it is at most 640 px on its longest side and 180 frames: 12 frames a second for clips up to 15 seconds, fewer for longer ones.
 
@@ -139,7 +139,7 @@ Results are written next to the originals with Finder-style names (`photo 2.jpg`
 - **Light by default.** An AppKit agent with no Dock icon, no background polling and no dependencies. Timers run only during a file drag, a scrolling capture or a recording.
 - **Minimal permissions.** Screen Recording is the only permission Kiwi asks for.
 - **Native glass.** Floating UI uses the system Liquid Glass material, hosted in non-activating panels so the app you are working in keeps focus. Motion respects Reduce Motion.
-- **Secure by construction.** Hardened runtime, empty entitlements, no network code, strict memory safety checks, and a verify script that proves it on every build.
+- **Secure by construction.** Hardened runtime, a single entitlement (the optional microphone), no network code, strict memory safety checks, and a verify script that proves it on every build.
 
 ## Project layout
 

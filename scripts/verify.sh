@@ -29,18 +29,21 @@ else
     fail "hardened runtime is not enabled"
 fi
 
-# 3. No entitlement that weakens the hardened runtime.
+# 3. No entitlement that weakens the hardened runtime, and none at all beyond
+#    the single one Kiwi declares: microphone input, for optional voice recording.
 entitlements="$(codesign -d --entitlements - "$APP" 2>/dev/null || true)"
 weak=""
 for key in get-task-allow disable-library-validation allow-dyld-environment-variables \
            allow-unsigned-executable-memory allow-jit disable-executable-page-protection \
-           device.audio-input device.camera network.client network.server automation.apple-events; do
+           device.camera network.client network.server automation.apple-events; do
     if [[ "$entitlements" == *"$key"* ]]; then weak="$weak $key"; fi
 done
-if [ -z "$weak" ]; then
-    pass "no runtime-weakening or extra entitlements"
+allowed="com.apple.security.device.audio-input"
+extra="$(printf '%s\n' "$entitlements" | grep -o -E 'com\.apple\.[A-Za-z0-9._-]+' | sort -u | grep -v -x -F "$allowed" | tr '\n' ' ' || true)"
+if [ -z "$weak" ] && [ -z "$extra" ]; then
+    pass "no runtime-weakening entitlements; at most microphone input"
 else
-    fail "unexpected entitlements:$weak"
+    fail "unexpected entitlements:$weak $extra"
 fi
 
 # 4. Only system libraries are linked: nothing bundled, nothing third-party.

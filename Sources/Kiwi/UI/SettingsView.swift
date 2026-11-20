@@ -9,6 +9,10 @@ enum SystemLinks {
         open("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     }
 
+    static func openMicrophoneSettings() {
+        open("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+    }
+
     static func openKeyboardSettings() {
         open("x-apple.systempreferences:com.apple.Keyboard-Settings.extension")
     }
@@ -169,6 +173,13 @@ struct SettingsView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Toggle("Record system audio", isOn: $prefs.recordSystemAudio)
+            Toggle("Record microphone", isOn: $prefs.recordMicrophone)
+                .onChange(of: prefs.recordMicrophone) { _, enabled in
+                    if enabled { confirmMicrophoneAccess() }
+                }
+            Text("Off by default. macOS asks for permission the first time and shows its orange indicator while the microphone is in use. Recordings with the microphone are saved as MOV.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
             Text(verbatim: recordingHint)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -218,7 +229,7 @@ struct SettingsView: View {
 
     private var recordingHint: String {
         let keys = prefs.shortcut(for: .record).map { " or with \($0.display)" } ?? ""
-        return "Recordings are saved as MP4 in the same folder as screenshots. Stop from the menu bar\(keys)."
+        return "Recordings are saved in the same folder as screenshots. Stop from the menu bar\(keys)."
     }
 
     private var systemSection: some View {
@@ -251,6 +262,17 @@ struct SettingsView: View {
                 }
             }
         )
+    }
+
+    /// Asks for the microphone as soon as the option is turned on, so the
+    /// permission prompt does not appear in the middle of a recording.
+    private func confirmMicrophoneAccess() {
+        Task { @MainActor in
+            if await RecordingController.microphoneAllowed() { return }
+            prefs.recordMicrophone = false
+            Toast.error("Allow the microphone for Kiwi in System Settings")
+            SystemLinks.openMicrophoneSettings()
+        }
     }
 
     private func chooseFolder() {

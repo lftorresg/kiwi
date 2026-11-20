@@ -2,8 +2,9 @@ import AppKit
 import AVFoundation
 import ScreenCaptureKit
 
-/// Records a display, or part of one, straight to an MP4 file (HEVC by default) using
-/// ScreenCaptureKit's own recording output. No frames pass through Kiwi.
+/// Records a display, or part of one, straight to a video file (HEVC by default) using
+/// ScreenCaptureKit's own recording output. No frames or audio pass through Kiwi.
+/// The file is MP4, or MOV when the microphone is recorded.
 @MainActor
 final class RecordingController: NSObject, SCRecordingOutputDelegate {
     static let shared = RecordingController()
@@ -38,6 +39,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
             borderPanel = border
         }
         let systemAudio = Prefs.shared.recordSystemAudio
+        let wantsMicrophone = Prefs.shared.recordMicrophone
         let useHEVC = Prefs.shared.recordHEVC
         let folder = Prefs.shared.saveFolderURL
 
@@ -60,13 +62,26 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
                 configuration.capturesAudio = systemAudio
                 configuration.excludesCurrentProcessAudio = true
 
+                // The microphone is used only when the user turned it on, and
+                // only if macOS confirms that Kiwi is allowed to.
+                var microphone = false
+                if wantsMicrophone {
+                    if let device = AVCaptureDevice.default(for: .audio), await Self.microphoneAllowed() {
+                        configuration.captureMicrophone = true
+                        configuration.microphoneCaptureDeviceID = device.uniqueID
+                        microphone = true
+                    } else {
+                        Toast.error("No microphone access, recording without it")
+                    }
+                }
+
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 let name = CaptureStore.makeName().replacingOccurrences(of: "Kiwi ", with: "Kiwi Recording ")
-                let url = CaptureStore.uniqueURL(in: folder, name: name, ext: "mp4")
+                let url = CaptureStore.uniqueURL(in: folder, name: name, ext: microphone ? "mov" : "mp4")
 
                 let recordingConfiguration = SCRecordingOutputConfiguration()
                 recordingConfiguration.outputURL = url
-                recordingConfiguration.outputFileType = .mp4
+                recordingConfiguration.outputFileType = microphone ? .mov : .mp4
                 recordingConfiguration.videoCodecType = useHEVC ? .hevc : .h264
 
                 let stream = SCStream(filter: setup.filter, configuration: configuration, delegate: nil)
@@ -149,6 +164,18 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
     }
 
     // MARK: Helpers
+
+    /// Whether Kiwi may use the microphone. Asks the first time.
+    static func microphoneAllowed() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .audio)
+        default:
+            return false
+        }
+    }
 
     /// H.264 wants even dimensions and is happiest at 4K or below.
     static func videoSize(width: Int, height: Int) -> (width: Int, height: Int) {

@@ -2,9 +2,18 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <!--
-  Deliberately empty. Kiwi runs under the hardened runtime with no exceptions:
-  no JIT, no unsigned memory, no DYLD environment variables, no disabled
-  library validation, no debugger attachment (get-task-allow), no microphone.
+  One entitlement, for one optional feature: recording your voice along with
+  a screen recording. The option is off by default, macOS still asks for
+  permission the first time, and it shows its indicator while the microphone
+  is in use.
+
+  Everything else stays closed under the hardened runtime: no JIT, no unsigned
+  memory, no DYLD environment variables, no disabled library validation, no
+  debugger attachment, no camera, no network. "make verify" fails if any
+  other entitlement is added here.
 -->
-<dict/>
+<dict>
+    <key>com.apple.security.device.audio-input</key>
+    <true/>
+</dict>
 </plist>

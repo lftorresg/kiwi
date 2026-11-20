@@ -10,13 +10,14 @@ Kiwi can see your screen, so it is built to hold as little power as possible and
 | Network access | Never used | No update checks, telemetry, uploads or web views. `make verify` fails if the binary references a networking API |
 | Accessibility | Not requested | Hotkeys use Carbon; drag detection reads only the drag pasteboard's change count and types |
 | Input Monitoring | Not requested | Same as above |
-| Microphone, camera | Not requested | Recording captures the screen and, optionally, system audio |
+| Microphone | Optional, off by default | Used only when you turn on *Record microphone*, and only while a recording runs. macOS asks for permission first and shows its indicator. The audio goes straight from ScreenCaptureKit to the file; Kiwi never handles it |
+| Camera | Not requested | |
 | Apple Events / automation | Not requested | |
 | Files | Only what you hand it | Dropped files, the save folder you choose, and its own cache |
 
 ## How it is built
 
-- **Hardened runtime, empty entitlements.** The app is signed with `--options runtime` and an entitlements file that grants nothing. That blocks code injection through `DYLD_INSERT_LIBRARIES`, loading of libraries that Apple did not sign, JIT and writable-executable memory, and debugger attachment. This matters because any code running inside Kiwi would inherit its Screen Recording permission.
+- **Hardened runtime, one entitlement.** The app is signed with `--options runtime` and an entitlements file that grants a single thing: microphone input, for the optional voice track in recordings. `make verify` fails if any other entitlement appears. The hardened runtime blocks code injection through `DYLD_INSERT_LIBRARIES`, loading of libraries that Apple did not sign, JIT and writable-executable memory, and debugger attachment. This matters because any code running inside Kiwi would inherit its Screen Recording permission.
 - **No dependencies.** `Package.swift` declares none. Everything linked ships with macOS. There is no bundled framework, plug-in, helper, or auto-updater.
 - **Memory safety.** Swift with bounds and overflow checks on in release builds (`-Ounchecked` is never used). Strict memory safety checking (SE-0458) is enabled, so every unsafe construct is reported at build time. The few that remain are confined to `App/HotKey.swift` (the Carbon hotkey bridge) and `App/Bridging.swift`, each marked `unsafe` with the reason it is safe as used.
 - **Verified builds.** `make verify` checks the signature, hardened runtime, entitlements, linked libraries, networking symbols, PIE, dependencies and Info.plist, and prints the binary's SHA-256. CI runs the same script on every push, with a read-only token and actions pinned to commit hashes.
