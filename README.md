@@ -99,7 +99,7 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles. 
 | --- | --- |
 | Return | Copy the result and close |
 | ⌘R | Auto-redact |
-| ⇧⌘C | Copy the text in the image |
+| ⇧⌘C | Copy all the text in the image. The toolbar's text button lets you drag over just the part you want. |
 | ⌘C / ⌘S / ⇧⌘S | Copy / Save / Save As |
 | Convert menu | Save the edited image as PNG, JPEG, HEIC, AVIF, TIFF or PDF |
 | ⌘Z / ⇧⌘Z | Undo / Redo |

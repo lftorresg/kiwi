@@ -46,6 +46,7 @@ enum EditorCommand {
     case zoomIn, zoomOut, zoomFit, zoomActual
     case rename
     case copyText
+    case pickText
 }
 
 /// Window that turns Command-key shortcuts into editor commands.
@@ -254,7 +255,12 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         case .autoRedact:
             autoRedact()
         case .copyText:
-            copyText()
+            copyText(in: nil)
+        case .pickText:
+            Toast.show("Drag over the text you want  ·  ⇧⌘C copies all of it", symbol: "text.viewfinder")
+            canvas.pickRegion { [weak self] rect in
+                self?.copyText(in: rect)
+            }
         case .rename:
             // Return in the name field: hand the keyboard back to the canvas.
             window.makeFirstResponder(canvas)
@@ -274,13 +280,24 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// Copies the text in the image to the clipboard. It reads the image as it
-    /// will be exported, so anything under a redaction box is not copied.
-    private func copyText() {
-        let image = model.rendered()
+    /// Copies text from the image to the clipboard: everything, or just what is
+    /// inside `region` (image pixels). It reads the image as it will be
+    /// exported, so anything under a redaction box is not copied.
+    private func copyText(in region: CGRect?) {
+        var image = model.rendered()
+        if let region {
+            // A little margin keeps letters at the edge of the box readable.
+            let padded = region.insetBy(dx: -6, dy: -6).integral.intersection(model.pixelBounds)
+            guard let cropped = image.cropping(to: padded) else {
+                Toast.error("Couldn't read that area")
+                return
+            }
+            image = cropped
+        }
+        let source = image
         Toast.show("Reading text…", symbol: "text.viewfinder")
         DispatchQueue.global(qos: .userInitiated).async {
-            let outcome: Result<String, Error> = Result { try TextReader.read(image) }
+            let outcome: Result<String, Error> = Result { try TextReader.read(source) }
             Task { @MainActor in
                 switch outcome {
                 case .success(let text) where text.isEmpty:
@@ -545,14 +562,14 @@ private struct EditorRootView: View {
     }
 
     private var textButton: some View {
-        Button { perform(.copyText) } label: {
+        Button { perform(.pickText) } label: {
             Image(systemName: "text.viewfinder")
                 .font(.system(size: 13, weight: .medium))
                 .frame(width: 32, height: 32)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("Copy the text in this image (⇧⌘C)")
+        .help("Copy text: drag over the part you want. ⇧⌘C copies all the text in the image.")
     }
 
     private var separator: some View {

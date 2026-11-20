@@ -31,6 +31,12 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
     private var resizing: Resize?
     private var didCheckpointResize = false
 
+    /// A one-off "drag a box" request, such as choosing which text to copy.
+    /// While it is set, the next drag reports a rectangle instead of drawing.
+    private var regionHandler: ((CGRect) -> Void)?
+    private var regionStart: CGPoint?
+    private var regionRect: CGRect?
+
     /// A drag that moves the image itself: where it started (view points) and the pan at that moment.
     private var panDrag: (start: CGPoint, origin: CGPoint)?
     /// True while Space is held, which turns any tool into a temporary hand.
@@ -275,6 +281,10 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
             addCursorRect(bounds, cursor: panDrag != nil ? .closedHand : .openHand)
             return
         }
+        if regionHandler != nil {
+            addCursorRect(imageRect, cursor: .crosshair)
+            return
+        }
         let cursor: NSCursor
         switch model.tool {
         case .select: cursor = .arrow
@@ -282,6 +292,41 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         default: cursor = .crosshair
         }
         addCursorRect(imageRect, cursor: cursor)
+    }
+
+    // MARK: Picking a region
+
+    /// Asks the user to drag a box on the image. `handler` gets the box in image pixels.
+    /// Escape cancels.
+    func pickRegion(_ handler: @escaping (CGRect) -> Void) {
+        commitText()
+        draft = nil
+        regionHandler = handler
+        regionStart = nil
+        regionRect = nil
+        needsDisplay = true
+        hostWindow?.invalidateCursorRects(for: self)
+    }
+
+    private func cancelRegionPick() {
+        regionHandler = nil
+        regionStart = nil
+        regionRect = nil
+        needsDisplay = true
+        hostWindow?.invalidateCursorRects(for: self)
+    }
+
+    private func drawRegionPick(in context: CGContext) {
+        guard let regionRect else { return }
+        let box = viewRect(for: regionRect)
+        context.saveGState()
+        context.setFillColor(Theme.kiwiNS.withAlphaComponent(0.18).cgColor)
+        context.fill(box)
+        context.setStrokeColor(Theme.kiwiNS.cgColor)
+        context.setLineWidth(1.5)
+        context.setLineDash(phase: 0, lengths: [5, 3])
+        context.stroke(box)
+        context.restoreGState()
     }
 
     // MARK: Dragging the image
@@ -363,6 +408,7 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
 
         drawSelectionOutline()
         drawFlashes(in: context)
+        drawRegionPick(in: context)
         drawCropOverlay(in: rect)
     }
 
@@ -482,6 +528,12 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         let point = imagePoint(for: event)
         let inside = model.pixelBounds.contains(point)
 
+        if regionHandler != nil {
+            regionStart = clamp(point)
+            regionRect = nil
+            return
+        }
+
         switch model.tool {
         case .select:
             if let id = model.selectedID,
@@ -530,6 +582,19 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         }
         var point = imagePoint(for: event)
         let shift = event.modifierFlags.contains(.shift)
+
+        if regionHandler != nil {
+            guard let start = regionStart else { return }
+            let end = clamp(point)
+            regionRect = CGRect(
+                x: min(start.x, end.x),
+                y: min(start.y, end.y),
+                width: abs(end.x - start.x),
+                height: abs(end.y - start.y)
+            )
+            needsDisplay = true
+            return
+        }
 
         if let resizing {
             if !didCheckpointResize {
@@ -602,6 +667,18 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
             return
         }
 
+        if let handler = regionHandler {
+            let picked = regionRect
+            regionStart = nil
+            regionRect = nil
+            // A plain click picks nothing: stay in the mode so the user can drag again.
+            guard let picked, picked.width >= 6, picked.height >= 6 else { return }
+            regionHandler = nil
+            hostWindow?.invalidateCursorRects(for: self)
+            handler(picked)
+            return
+        }
+
         if movingID != nil {
             movingID = nil
             lastMovePoint = nil
@@ -659,7 +736,9 @@ final class EditorCanvasView: NSView, NSTextFieldDelegate {
         case 51, 117: // delete, forward delete
             model.removeSelected()
         case 53: // escape
-            if draft != nil || cropStart != nil || cropRect != nil {
+            if regionHandler != nil {
+                cancelRegionPick()
+            } else if draft != nil || cropStart != nil || cropRect != nil {
                 draft = nil
                 cropStart = nil
                 cropRect = nil
