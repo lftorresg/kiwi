@@ -81,7 +81,7 @@ Detection is best effort. Look at the result before you share it.
 
 ## Scrolling capture
 
-Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches each frame against the last one and appends only the new rows, so pausing or scrolling back up does no harm. Sticky headers and footers are kept once. If Kiwi loses track (you scrolled too fast), it says so: scroll back up a little and continue. The result goes through the normal preview, including auto-redaction.
+Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches each frame against the last one and appends only the new rows, so pausing or scrolling back up does no harm. Sticky headers and footers are kept once. If Kiwi loses track (you scrolled too fast), it says so: scroll back up a little and continue. Pages that move on their own, such as a playing video or an animation, are fine as long as the moving part is under about half of the area. The result goes through the normal preview, including auto-redaction.
 
 ## Recording
 
