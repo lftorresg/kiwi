@@ -16,7 +16,7 @@ enum PIICategory: String, CaseIterable, Identifiable {
         case .email: return "Email addresses"
         case .phone: return "Phone numbers"
         case .card: return "Payment card numbers"
-        case .nationalID: return "National IDs (CPF, RG, SSN)"
+        case .nationalID: return "ID numbers (CPF, RG, CNPJ, CNH, passport, SSN)"
         case .secret: return "Passwords, API keys and tokens"
         case .network: return "IP and MAC addresses"
         }
@@ -78,6 +78,23 @@ enum PIIDetector {
             group: 1
         ),
 
+        // Brazilian CNPJ (company registration), formatted or bare, passing its check digits.
+        rule(.nationalID, #"(?<![\d.])\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}(?![\d.])"#, validate: { PIIChecks.cnpj($0) }),
+        // PIS / NIS / PASEP in its usual punctuation.
+        rule(.nationalID, #"(?<![\d.])\d{3}\.\d{5}\.\d{2}-\d(?!\d)"#),
+        // Numbers announced by a label: driving licence, voter ID, PIS.
+        rule(
+            .nationalID,
+            #"(?i)(?<![A-Za-z])(?:CNH|habilita[cç][aã]o|t[ií]tulo\s+(?:de\s+)?eleitor|PIS|NIS|PASEP)(?![A-Za-z])\D{0,20}?(\d[\d. \-]{6,16}\d)"#,
+            group: 1
+        ),
+        // Passport numbers announced by a label.
+        rule(
+            .nationalID,
+            #"(?i)(?<![A-Za-z])(?:passaporte|passport)(?![A-Za-z])[^A-Za-z0-9]{0,15}(?:n[ºo°.]{0,2}\s*)?([A-Z]{2}\s?\d{6,7})(?!\d)"#,
+            group: 1
+        ),
+
         // Phone numbers: international prefix, Brazilian and North American shapes.
         rule(.phone, #"(?<![\w+])\+\d{1,3}[ \-.]?(?:\(?\d{1,4}\)?[ \-.]?){2,4}\d{2,4}(?!\d)"#),
         rule(.phone, #"(?<![\w(])\(\d{2}\)[ \-]?9?\d{4}[ \-]?\d{4}(?!\d)"#),
@@ -115,7 +132,7 @@ enum PIIDetector {
 
     // On ID cards and forms the caption and the number often sit on separate
     // lines, so the scanner also asks about a line and the one after it.
-    private static let idLabelPattern = #"(?i)^\W*(?:RG|R\.G\.?|registro\s+geral|(?:carteira\s+de\s+)?identidade|doc(?:umento)?\.?\s+(?:de\s+)?identidade|n[ºo°.]{0,2}\s*(?:do\s+)?(?:RG|registro)|CPF|CNH|SSN|social\s+security(?:\s+number)?)\W*$"#
+    private static let idLabelPattern = #"(?i)^\W*(?:RG|R\.G\.?|registro\s+geral|(?:carteira\s+de\s+)?identidade|doc(?:umento)?\.?\s+(?:de\s+)?identidade|n[ºo°.]{0,2}\s*(?:do\s+)?(?:RG|registro)|CPF|CNPJ|CNH|PIS|NIS|t[ií]tulo\s+(?:de\s+)?eleitor|SSN|social\s+security(?:\s+number)?)\W*$"#
     private static let idNumberPattern = #"^\W*\d[\d.\-/ ]{3,18}[\dXx]\W*$"#
     private static let idLabel = try? NSRegularExpression(pattern: idLabelPattern, options: [])
     private static let idNumber = try? NSRegularExpression(pattern: idNumberPattern, options: [])
@@ -221,6 +238,23 @@ enum PIIChecks {
             return remainder == 10 ? 0 : remainder
         }
         return checkDigit(9) == numbers[9] && checkDigit(10) == numbers[10]
+    }
+
+    /// Brazilian CNPJ check digits.
+    static func cnpj(_ text: String) -> Bool {
+        let numbers = digits(text)
+        guard numbers.count == 14, Set(numbers).count > 1 else { return false }
+        let weights = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+
+        func checkDigit(_ count: Int) -> Int {
+            var sum = 0
+            for (digit, weight) in zip(numbers.prefix(count), weights.suffix(count)) {
+                sum += digit * weight
+            }
+            let remainder = sum % 11
+            return remainder < 2 ? 0 : 11 - remainder
+        }
+        return checkDigit(12) == numbers[12] && checkDigit(13) == numbers[13]
     }
 
     static func hasDigitAndLetter(_ text: String) -> Bool {
