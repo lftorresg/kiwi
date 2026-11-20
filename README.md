@@ -18,7 +18,7 @@ Kiwi lives in the menu bar.
 
 **Scroll and record.** ⇧⌘6 stitches a page while you scroll. ⇧⌘5 records an area to MP4.
 
-**The wheel.** Start dragging files in Finder, tap ⇧, ⌘ or ⌃, and a glass wheel opens under the pointer. Drop on a slice to convert, resize, compress, strip metadata, redact, hash or share.
+**The wheel.** Start dragging files in Finder, tap ⇧, ⌘ or ⌃, and a glass wheel opens under the pointer. Drop on a slice to convert images, video, audio, PDFs and documents, or to resize, compress, redact, rename, zip, hash or share.
 
 Everything runs on your Mac. Kiwi makes no network connections. See [SECURITY.md](SECURITY.md).
 
@@ -122,17 +122,24 @@ Closing the editor window keeps your edits: the edited image replaces the copy o
 
 ## The wheel
 
-While dragging one or more files:
+While dragging one or more files, tap a key to open a ring. The slices depend on what you are dragging:
 
-| Tap | Ring | Slices |
+| Dragging | ⇧ Convert | ⌘ Tools |
 | --- | --- | --- |
-| ⇧ | Convert | PNG, JPEG, HEIC, AVIF, TIFF, PDF |
-| ⌘ | Tools | Half size, Fit 1920, Compress, Strip info, Redact, Edit |
-| ⌃ | Actions | Copy, Copy path, Reveal, SHA-256, Copy text, Share |
+| Images | PNG, JPEG, HEIC, AVIF, TIFF, PDF | Half size, Fit 1920, Compress, Strip info, Redact, Edit |
+| Videos | MP4, HEVC, MOV, GIF, Audio (M4A) | Compress, 1080p, 720p, Mute |
+| Audio | M4A, WAV, AIFF, FLAC | |
+| PDFs | PNG, JPEG (one image per page), Text | Merge, Split |
+| Documents (DOCX, DOC, RTF, ODT, TXT) | PDF, DOCX, RTF, ODT, TXT, HTML | |
+| Anything else, or a mix | ZIP | |
 
-Drop on a slice to run it. Drop on the hub, or anywhere outside the wheel, to cancel. Keys that were already held when the drag began are ignored.
+⌃ opens **Actions** for any file: Copy, Copy path, Reveal, Rename, ZIP, SHA-256, Share, plus Copy text for images and PDFs. When a kind has no tools, ⌘ shows Actions too.
 
-Results are written next to the originals with Finder-style names (`photo 2.jpg`). Originals are never modified or deleted, and one file failing does not stop the rest. Conversion quality is adjustable in Settings.
+Drop on a slice to run it. Drop on the hub, or anywhere outside the wheel, to cancel. Keys that were already held when the drag began are ignored. The wheel learns what you are dragging only when the drag reaches it, so the slices appear a moment after the ring does.
+
+Results are written next to the originals with Finder-style names (`photo 2.jpg`). Originals are never modified or deleted, and one file failing does not stop the rest. The one exception is Rename, which renames the files themselves and never overwrites another file. Conversion quality is adjustable in Settings. Jobs that take a while show a progress panel with a Cancel button; Kiwi runs one job at a time.
+
+Everything is done with the frameworks that ship with macOS, so the formats are the ones macOS can write: there is no MP3, WebM or MKV output. Documents keep text, fonts, colours, lists and simple tables; complex layouts may shift. Kiwi makes ZIP archives but does not unpack them.
 
 ## Design notes
 

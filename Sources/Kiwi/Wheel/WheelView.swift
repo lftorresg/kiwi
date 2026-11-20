@@ -69,11 +69,12 @@ struct WheelView: View {
             value: model.visible
         )
         .animation(.easeInOut(duration: 0.15), value: model.ring)
+        .animation(.easeInOut(duration: 0.15), value: model.kind)
         .frame(width: WheelMetrics.panelSide, height: WheelMetrics.panelSide)
         .allowsHitTesting(false)
     }
 
-    private var items: [WheelItem] { model.ring.items }
+    private var items: [WheelItem] { model.items }
 
     /// Angular size of one slice, in degrees.
     private var slice: Double { 360.0 / Double(max(items.count, 1)) }

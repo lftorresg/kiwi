@@ -59,7 +59,11 @@ final class WheelController {
     private func show(_ ring: WheelRing) {
         hideToken += 1
         let wheelPanel = makePanelIfNeeded()
-        model.ring = ring
+        if !model.visible {
+            // A new drag: what is being dragged is not known yet.
+            model.kind = nil
+        }
+        model.ring = usable(ring)
         model.highlighted = nil
 
         if !model.visible {
@@ -91,11 +95,28 @@ final class WheelController {
         }
     }
 
+    /// A ring with nothing to offer for these files gives way to Actions.
+    private func usable(_ ring: WheelRing) -> WheelRing {
+        guard let kind = model.kind, ring.items(for: kind).isEmpty else { return ring }
+        return .actions
+    }
+
     // MARK: Drop handling (called by WheelDropView)
+
+    /// True while the wheel is up but has not seen the dragged files yet.
+    var needsFiles: Bool { model.visible && model.kind == nil }
+
+    /// The drag has reached the wheel, so Kiwi is now a drop target and may
+    /// look at the files. Their kind picks the slices.
+    func identify(_ urls: [URL]) {
+        guard needsFiles, !urls.isEmpty else { return }
+        model.kind = FileKind.of(urls)
+        model.ring = usable(model.ring)
+    }
 
     func item(at point: NSPoint, in bounds: NSRect) -> (index: Int, item: WheelItem)? {
         guard model.visible else { return nil }
-        let items = model.ring.items
+        let items = model.items
         guard let index = WheelMetrics.sliceIndex(
             dx: point.x - bounds.midX,
             dy: point.y - bounds.midY,
@@ -114,6 +135,7 @@ final class WheelController {
     }
 
     func drop(_ urls: [URL], at point: NSPoint, in bounds: NSRect) -> Bool {
+        identify(urls)
         guard !urls.isEmpty, let hit = item(at: point, in: bounds) else {
             hide()
             return false
@@ -171,12 +193,25 @@ final class WheelDropView: NSView {
         return overSlice ? .copy : []
     }
 
+    private func fileURLs(of sender: NSDraggingInfo) -> [URL] {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let objects = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) ?? []
+        return objects.compactMap { $0 as? URL }
+    }
+
+    private func identifyIfNeeded(_ sender: NSDraggingInfo) {
+        guard let controller, controller.needsFiles else { return }
+        controller.identify(fileURLs(of: sender))
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        operation(for: sender)
+        identifyIfNeeded(sender)
+        return operation(for: sender)
     }
 
     override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        operation(for: sender)
+        identifyIfNeeded(sender)
+        return operation(for: sender)
     }
 
     override func draggingExited(_ sender: NSDraggingInfo?) {
@@ -187,17 +222,20 @@ final class WheelDropView: NSView {
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         let point = convert(sender.draggingLocation, from: nil)
-        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
-        let objects = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) ?? []
-        let urls = objects.compactMap { $0 as? URL }
-        return controller?.drop(urls, at: point, in: bounds) ?? false
+        return controller?.drop(fileURLs(of: sender), at: point, in: bounds) ?? false
     }
 }
 
-/// Runs wheel actions off the main thread and reports the outcome with a toast.
+/// Runs wheel actions off the main thread. Quick ones end with a toast; ones
+/// that take a while also get a progress panel with a Cancel button.
 @MainActor
 enum WheelRunner {
+    /// The job in flight, if any. Kiwi runs one at a time.
+    private static var current: Task<Void, Never>?
+
     static func run(_ action: WheelAction, on urls: [URL]) {
+        let quality = Prefs.shared.convertQuality
+
         switch action {
         case .copy:
             Clipboard.copy(files: urls)
@@ -226,29 +264,44 @@ enum WheelRunner {
         case .share:
             break // handled by WheelController, which owns the anchor view
 
+        case .rename:
+            // Let the drop finish first: a dialog inside it would stall the app the files came from.
+            after(0.15) { rename(urls) }
+
+        case .zip:
+            batch(urls, title: "Compressing", success: "ZIP created") { files, _ in
+                try Archive.zip(files)
+            }
+
+        // MARK: Images
+
         case .convert(let format):
-            let quality = Prefs.shared.convertQuality
-            process(urls, verb: "Converted", suffix: "to \(format.title)") { url in
+            each(urls, where: ImageEngine.isImage, noun: "image",
+                 title: "Converting to \(format.title)", verb: "Converted", suffix: "to \(format.title)") { url, _ in
                 try ImageEngine.convert(url, to: format, quality: quality)
             }
 
         case .resizeHalf:
-            process(urls, verb: "Resized", suffix: "to half size") { url in
+            each(urls, where: ImageEngine.isImage, noun: "image",
+                 title: "Resizing", verb: "Resized", suffix: "to half size") { url, _ in
                 try ImageEngine.resize(url, factor: 0.5)
             }
 
         case .fit(let maxPixel):
-            process(urls, verb: "Resized", suffix: "to fit \(maxPixel) px") { url in
+            each(urls, where: ImageEngine.isImage, noun: "image",
+                 title: "Resizing", verb: "Resized", suffix: "to fit \(maxPixel) px") { url, _ in
                 try ImageEngine.resize(url, maxPixel: maxPixel)
             }
 
         case .compress:
-            process(urls, verb: "Compressed", suffix: "") { url in
+            each(urls, where: ImageEngine.isImage, noun: "image",
+                 title: "Compressing", verb: "Compressed", suffix: "") { url, _ in
                 try ImageEngine.compress(url)
             }
 
         case .stripMetadata:
-            process(urls, verb: "Stripped info from", suffix: "") { url in
+            each(urls, where: ImageEngine.isImage, noun: "image",
+                 title: "Stripping info", verb: "Stripped info from", suffix: "") { url, _ in
                 try ImageEngine.stripMetadata(url)
             }
 
@@ -258,25 +311,266 @@ enum WheelRunner {
                 Toast.error("Turn on something to redact in Settings")
                 return
             }
-            Toast.show("Looking for sensitive text…", symbol: "eye.slash")
-            process(urls, verb: "Redacted", suffix: "") { url in
+            each(urls, where: ImageEngine.isImage, noun: "image",
+                 title: "Looking for sensitive text", verb: "Redacted", suffix: "") { url, _ in
                 try ImageEngine.redact(url, options: options).url
+            }
+
+        // MARK: Video and audio
+
+        case .video(let job):
+            each(urls, where: MediaEngine.isVideo, noun: "video",
+                 title: job.working, verb: job.result.verb, suffix: job.result.suffix) { url, progress in
+                try await MediaEngine.run(job, on: url, progress: progress)
+            }
+
+        case .gif:
+            each(urls, where: MediaEngine.isVideo, noun: "video",
+                 title: "Making GIF", verb: "Made a GIF of", suffix: "") { url, _ in
+                try await GIFExporter.export(video: url)
+            }
+
+        case .audio(let format):
+            each(urls, where: MediaEngine.isAudio, noun: "audio file",
+                 title: "Converting to \(format.title)", verb: "Converted", suffix: "to \(format.title)") { url, progress in
+                try await MediaEngine.convertAudio(url, to: format, progress: progress)
+            }
+
+        // MARK: PDF and documents
+
+        case .pdfImages(let format):
+            each(urls, where: PDFEngine.isPDF, noun: "PDF",
+                 title: "Rendering pages", verb: "Rendered", suffix: "to \(format.title)") { url, progress in
+                try PDFEngine.images(of: url, format: format, quality: quality, progress: progress)
+            }
+
+        case .pdfText:
+            each(urls, where: PDFEngine.isPDF, noun: "PDF",
+                 title: "Extracting text", verb: "Extracted the text of", suffix: "") { url, _ in
+                try PDFEngine.text(of: url)
+            }
+
+        case .pdfSplit:
+            each(urls, where: PDFEngine.isPDF, noun: "PDF",
+                 title: "Splitting", verb: "Split", suffix: "into pages") { url, progress in
+                try PDFEngine.split(url, progress: progress)
+            }
+
+        case .pdfMerge:
+            let documents = urls.filter(PDFEngine.isPDF)
+            guard documents.count >= 2 else {
+                Toast.error("Drag two or more PDFs to merge them")
+                return
+            }
+            batch(documents, title: "Merging", success: "Merged \(documents.count) PDFs") { files, progress in
+                try PDFEngine.merge(files, progress: progress)
+            }
+
+        case .document(let format):
+            each(urls, where: DocumentEngine.isDocument, noun: "document",
+                 title: "Converting to \(format.title)", verb: "Converted", suffix: "to \(format.title)") { url, _ in
+                try await DocumentEngine.convert(url, to: format)
             }
         }
     }
 
-    /// Reads the text in every image and copies it, images separated by a blank line.
+    // MARK: Running jobs
+
+    /// Starts a job unless one is still running.
+    private static func begin(title: String) -> Bool {
+        guard current == nil else {
+            Toast.error("Kiwi is still working on the last drop")
+            return false
+        }
+        ProgressPanel.shared.begin(title: title)
+        return true
+    }
+
+    private static func end() {
+        current = nil
+        ProgressPanel.shared.end()
+    }
+
+    /// Runs `work` on each matching file in turn. One bad file never stops the rest.
+    private static func each(
+        _ urls: [URL],
+        where accepts: (URL) -> Bool,
+        noun: String,
+        title: String,
+        verb: String,
+        suffix: String,
+        work: @escaping @Sendable (URL, @escaping ProgressHandler) async throws -> URL
+    ) {
+        let files = urls.filter(accepts)
+        let skipped = urls.count - files.count
+        guard !files.isEmpty else {
+            Toast.error("That only works with \(noun)s")
+            return
+        }
+        guard begin(title: title) else { return }
+        let panel = ProgressPanel.shared
+        let total = files.count
+
+        let task = Task.detached(priority: .userInitiated) {
+            var done = 0
+            var firstError: String?
+            for (index, url) in files.enumerated() {
+                if Task.isCancelled { break }
+                let name = url.lastPathComponent
+                let base = Double(index) / Double(total)
+                await MainActor.run {
+                    panel.update(detail: total == 1 ? name : "\(index + 1) of \(total) · \(name)", fraction: base)
+                }
+                do {
+                    _ = try await work(url) { fraction in
+                        let overall = base + min(1, max(0, fraction)) / Double(total)
+                        Task { @MainActor in panel.update(fraction: overall) }
+                    }
+                    done += 1
+                } catch is CancellationError {
+                    break
+                } catch {
+                    if firstError == nil { firstError = error.localizedDescription }
+                }
+            }
+            let succeeded = done
+            let failed = total - done + skipped
+            let errorText = firstError
+            let cancelled = Task.isCancelled
+
+            await MainActor.run {
+                end()
+                if cancelled {
+                    Toast.show(succeeded > 0 ? "Stopped after \(succeeded) of \(total)" : "Cancelled", symbol: "xmark.circle")
+                    return
+                }
+                if succeeded == 0 {
+                    Toast.error(errorText ?? "Nothing was changed")
+                    return
+                }
+                var message = "\(verb) \(succeeded) \(succeeded == 1 ? noun : noun + "s")"
+                if !suffix.isEmpty { message += " \(suffix)" }
+                if failed > 0 { message += " · \(failed) skipped" }
+                Toast.show(message)
+            }
+        }
+        current = task
+        panel.onCancel = { task.cancel() }
+    }
+
+    /// Runs `work` once on all the files and shows the single result in Finder.
+    private static func batch(
+        _ files: [URL],
+        title: String,
+        success: String,
+        work: @escaping @Sendable ([URL], @escaping ProgressHandler) async throws -> URL
+    ) {
+        guard !files.isEmpty, begin(title: title) else { return }
+        let panel = ProgressPanel.shared
+        let detail = files.count == 1 ? files[0].lastPathComponent : "\(files.count) items"
+        panel.update(detail: detail)
+
+        let task = Task.detached(priority: .userInitiated) {
+            var output: URL?
+            var errorText: String?
+            do {
+                output = try await work(files) { fraction in
+                    Task { @MainActor in panel.update(fraction: fraction) }
+                }
+            } catch is CancellationError {
+                errorText = nil
+            } catch {
+                errorText = error.localizedDescription
+            }
+            let result = output
+            let message = errorText
+            let cancelled = Task.isCancelled
+
+            await MainActor.run {
+                end()
+                if let result {
+                    Toast.show(success)
+                    NSWorkspace.shared.activateFileViewerSelecting([result])
+                } else if cancelled {
+                    Toast.show("Cancelled", symbol: "xmark.circle")
+                } else {
+                    Toast.error(message ?? "That didn't work")
+                }
+            }
+        }
+        current = task
+        panel.onCancel = { task.cancel() }
+    }
+
+    // MARK: Rename
+
+    /// Asks for a name and renames the files in place. One file takes the
+    /// name as typed; several get the name and a number. Extensions are kept,
+    /// and nothing is ever overwritten.
+    private static func rename(_ urls: [URL]) {
+        guard let first = urls.first else { return }
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = urls.count == 1 ? "Rename" : "Rename \(urls.count) files"
+        alert.informativeText = urls.count == 1
+            ? "The extension stays the same."
+            : "Each file gets this name and a number. Extensions stay the same."
+        let field = NSTextField(string: first.deletingPathExtension().lastPathComponent)
+        field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let name = CaptureStore.sanitizedName(field.stringValue)
+        guard !name.isEmpty else {
+            Toast.error("That name can't be used")
+            return
+        }
+
+        let fm = FileManager.default
+        var renamed = 0
+        for (index, url) in urls.enumerated() {
+            let stem = urls.count == 1 ? name : "\(name) \(index + 1)"
+            let ext = url.pathExtension
+            let target = url.deletingLastPathComponent()
+                .appendingPathComponent(ext.isEmpty ? stem : "\(stem).\(ext)")
+            if target.path == url.path || fm.fileExists(atPath: target.path) { continue }
+            if (try? fm.moveItem(at: url, to: target)) != nil {
+                renamed += 1
+            }
+        }
+        let skipped = urls.count - renamed
+        if renamed == 0 {
+            Toast.error("Nothing renamed: that name is already taken")
+        } else if skipped > 0 {
+            Toast.show("Renamed \(renamed) · \(skipped) skipped", symbol: "character.cursor.ibeam")
+        } else {
+            Toast.show(renamed == 1 ? "Renamed" : "Renamed \(renamed) files", symbol: "character.cursor.ibeam")
+        }
+    }
+
+    // MARK: Text and checksums
+
+    /// Reads the text in every image and PDF and copies it, files separated by a blank line.
     private static func copyText(from urls: [URL]) {
-        let images = urls.filter(ImageEngine.isImage)
-        guard !images.isEmpty else {
-            Toast.error("Copy text works with images")
+        let readable = urls.filter { ImageEngine.isImage($0) || PDFEngine.isPDF($0) }
+        guard !readable.isEmpty else {
+            Toast.error("Copy text works with images and PDFs")
             return
         }
         Toast.show("Reading text…", symbol: "text.viewfinder")
         DispatchQueue.global(qos: .userInitiated).async {
             var parts: [String] = []
-            for url in images {
-                if let image = try? ImageEngine.loadUpright(url), let text = try? TextReader.read(image), !text.isEmpty {
+            for url in readable {
+                if PDFEngine.isPDF(url) {
+                    if let text = PDFEngine.string(of: url) {
+                        parts.append(text)
+                    }
+                } else if let image = try? ImageEngine.loadUpright(url),
+                          let text = try? TextReader.read(image), !text.isEmpty {
                     parts.append(text)
                 }
             }
@@ -323,48 +617,6 @@ enum WheelRunner {
                     count == 1 ? "SHA-256 copied · \(preview)…" : "Copied \(count) SHA-256 checksums",
                     symbol: "number"
                 )
-            }
-        }
-    }
-
-    private static func process(
-        _ urls: [URL],
-        verb: String,
-        suffix: String,
-        work: @escaping @Sendable (URL) throws -> URL
-    ) {
-        let images = urls.filter(ImageEngine.isImage)
-        let skipped = urls.count - images.count
-        guard !images.isEmpty else {
-            Toast.error("That only works with images")
-            return
-        }
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            var done = 0
-            var firstError: String?
-            // One bad file never stops the rest.
-            for url in images {
-                do {
-                    _ = try work(url)
-                    done += 1
-                } catch {
-                    if firstError == nil { firstError = error.localizedDescription }
-                }
-            }
-            let succeeded = done
-            let failed = images.count - done + skipped
-            let errorText = firstError
-
-            Task { @MainActor in
-                if succeeded == 0 {
-                    Toast.error(errorText ?? "Nothing was changed")
-                    return
-                }
-                var message = "\(verb) \(succeeded) \(succeeded == 1 ? "image" : "images")"
-                if !suffix.isEmpty { message += " \(suffix)" }
-                if failed > 0 { message += " · \(failed) skipped" }
-                Toast.show(message)
             }
         }
     }
