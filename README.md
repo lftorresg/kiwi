@@ -112,6 +112,8 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles. 
 
 Type in the name field at the top left of the editor and press Return to rename a capture. The name is used for Save, Convert, Save As and drag-out, and a file that was already saved is renamed on disk.
 
+The pin button keeps the image floating above your other windows. Drag a pin to move it, pinch or scroll to resize it, double-click to close it, right-click for more. Pins never appear in later captures.
+
 Closing the editor window keeps your edits: the edited image replaces the copy on the clipboard. To throw the capture away, use Delete. A file is written to your screenshots folder only when you press Save, export, or have *Also save every capture* on.
 
 ## The wheel

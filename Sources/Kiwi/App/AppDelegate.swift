@@ -99,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(menuItem("Record Screen", #selector(recordScreen), symbol: "menubar.dock.rectangle"))
         menu.addItem(.separator())
         menu.addItem(menuItem("Edit Last Capture", #selector(editLast), key: "2", symbol: "pencil.tip.crop.circle"))
+        menu.addItem(menuItem("Pin Last Capture", #selector(pinLast), symbol: "pin"))
         menu.addItem(recentCapturesItem())
         menu.addItem(menuItem("Open Screenshots Folder", #selector(openFolder), symbol: "folder"))
         menu.addItem(.separator())
@@ -257,6 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func recordScreen() { CaptureController.shared.recordScreen() }
     @objc private func stopRecording() { RecordingController.shared.stop() }
     @objc private func editLast() { CaptureController.shared.editLast() }
+    @objc private func pinLast() { CaptureController.shared.pinLast() }
     @objc private func openFolder() { CaptureController.shared.revealSaveFolder() }
     @objc private func openSettings() { WindowRouter.shared.showSettings() }
     @objc private func openSetup() { WindowRouter.shared.showSetup() }

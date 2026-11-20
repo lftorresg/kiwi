@@ -52,6 +52,7 @@ enum EditorCommand {
     case rename
     case copyText
     case pickText
+    case pin
 }
 
 /// Window that turns Command-key shortcuts into editor commands.
@@ -259,6 +260,10 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
             window.close()
         case .autoRedact:
             autoRedact()
+        case .pin:
+            applyEdits()
+            PinController.shared.pin(capture.image, scale: capture.scale)
+            Toast.show("Pinned  ·  double-click the pin to close it", symbol: "pin.fill")
         case .copyText:
             copyText(in: nil)
         case .pickText:
@@ -758,6 +763,13 @@ private struct EditorRootView: View {
             .buttonBorderShape(.circle)
             .buttonStyle(.glass)
             .help("Delete this screenshot (⌘⌫)")
+
+            Button { perform(.pin) } label: {
+                Image(systemName: "pin")
+            }
+            .buttonBorderShape(.circle)
+            .buttonStyle(.glass)
+            .help("Pin: keep this image floating above your other windows")
 
             Button { perform(.save) } label: {
                 actionLabel("Save", "square.and.arrow.down", showLabel: showLabels)
