@@ -23,6 +23,7 @@ final class Prefs: ObservableObject {
         static let editAfterCapture = "editAfterCapture"
         static let recordHEVC = "recordHEVC"
         static let shortcuts = "shortcuts"
+        static let recordMicrophone = "recordMicrophone"
     }
 
     @Published var copyOnCapture: Bool {
@@ -69,6 +70,11 @@ final class Prefs: ObservableObject {
     }
     @Published var recordSystemAudio: Bool {
         didSet { UserDefaults.standard.set(recordSystemAudio, forKey: Key.recordSystemAudio) }
+    }
+
+    /// Record your voice along with the screen. Off unless you turn it on.
+    @Published var recordMicrophone: Bool {
+        didSet { UserDefaults.standard.set(recordMicrophone, forKey: Key.recordMicrophone) }
     }
 
     /// Record in HEVC (sharper and smaller) instead of H.264 (plays in more places).
@@ -148,6 +154,7 @@ final class Prefs: ObservableObject {
             Key.recordSystemAudio: false,
             Key.editAfterCapture: true,
             Key.recordHEVC: true,
+            Key.recordMicrophone: false,
         ])
 
         copyOnCapture = defaults.bool(forKey: Key.copyOnCapture)
@@ -167,6 +174,7 @@ final class Prefs: ObservableObject {
         recordSystemAudio = defaults.bool(forKey: Key.recordSystemAudio)
         editAfterCapture = defaults.bool(forKey: Key.editAfterCapture)
         recordHEVC = defaults.bool(forKey: Key.recordHEVC)
+        recordMicrophone = defaults.bool(forKey: Key.recordMicrophone)
         shortcuts = Prefs.decodeShortcuts(defaults.dictionary(forKey: Key.shortcuts) ?? [:])
     }
 }

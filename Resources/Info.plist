@@ -30,6 +30,8 @@
     <true/>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Kiwi records your voice only when you turn on microphone recording, and only while a screen recording is running.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Kiwi</string>
 </dict>
