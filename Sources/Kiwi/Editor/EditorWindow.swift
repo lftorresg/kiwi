@@ -355,9 +355,10 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
                     Toast.show("Covered \(PIIScanner.summary(of: findings))", symbol: "eye.slash.fill")
                     // Outline the new boxes for a few seconds so they are easy to check.
                     self.model.flashIDs = added
-                    after(4) { [weak self] in
-                        guard let self, self.model.flashIDs == added else { return }
-                        self.model.flashIDs = []
+                    after(4) {
+                        if self.model.flashIDs == added {
+                            self.model.flashIDs = []
+                        }
                     }
                 case .failure:
                     Toast.error("Couldn't scan the image")
