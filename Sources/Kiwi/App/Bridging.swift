@@ -21,6 +21,29 @@ enum Bitmap {
     }
 }
 
+enum Coordination {
+    /// Asks Foundation for a ZIP of `folder` and hands it to `body`. The ZIP
+    /// is a temporary file that Foundation removes when `body` returns.
+    static func withZippedCopy(of folder: URL, _ body: (URL) throws -> Void) throws {
+        var coordinationError: NSError?
+        var bodyError: Error?
+        // Flagged only because the error comes back through a pointer that
+        // Objective-C fills in. It points at the local variable above for the
+        // length of this call and nowhere else.
+        unsafe NSFileCoordinator().coordinate(
+            readingItemAt: folder, options: [.forUploading], error: &coordinationError
+        ) { zipped in
+            do {
+                try body(zipped)
+            } catch {
+                bodyError = error
+            }
+        }
+        if let coordinationError { throw coordinationError }
+        if let bodyError { throw bodyError }
+    }
+}
+
 extension NSView {
     /// The window this view is in. AppKit declares `NSView.window` as
     /// unowned(unsafe); reading it on the main thread from a live view is safe.
