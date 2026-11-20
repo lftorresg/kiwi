@@ -145,6 +145,16 @@ Everything is done with the frameworks that ship with macOS, so the formats are 
 
 If the wheel gets in the way in some app, add that app under Settings → Drag wheel → *Never show for drags from*.
 
+## Releasing
+
+```sh
+./scripts/release.sh
+```
+
+builds from clean, runs every `make verify` check, and writes `dist/Kiwi-<version>.zip`, a `.dmg` with an Applications shortcut, and `SHA256SUMS`. The version comes from `Resources/Info.plist`.
+
+With the default signing (the local `Kiwi Local` identity, or ad hoc) the result is fine for your own Macs. On anyone else's Mac, Gatekeeper refuses it on first launch and the owner has to allow it under System Settings → Privacy & Security. To ship a build that opens normally everywhere you need an Apple Developer ID; pass it as `SIGN_ID` together with a `NOTARY_PROFILE` and the script also notarizes and staples. The top of the script has the details.
+
 ## Design notes
 
 - **Light by default.** An AppKit agent with no Dock icon, no background polling and no dependencies. Timers run only during a file drag, a scrolling capture or a recording.
@@ -164,7 +174,7 @@ Sources/Kiwi/
   Engine/     image conversion on ImageIO, checksums
   UI/         shared panels, toast, settings, setup guide
 Resources/    Info.plist, entitlements, app icon
-scripts/      verify.sh
+scripts/      verify.sh, setup-signing.sh, release.sh
 ```
 
 ## Troubleshooting
