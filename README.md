@@ -61,6 +61,7 @@ Kiwi opens a short setup guide:
 - **Copy**, **Edit**, **Save**, **Delete** act on the capture. Delete removes the working copy, moves any saved copy to the Trash, and clears the clipboard if it still holds that image.
 - Drag the thumbnail into Slack, Mail, Finder, or anywhere that accepts a PNG.
 - Saved captures and recordings go to `~/Pictures/Kiwi` unless you choose another folder.
+- The menu bar menu lists the session's **Recent Captures**; pick one to open it in the editor again. The list is cleared when Kiwi quits.
 
 ## Redaction
 

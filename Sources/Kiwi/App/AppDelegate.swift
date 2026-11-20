@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CaptureController.shared.onNeedsSetup = {
             WindowRouter.shared.showSetup()
         }
+        CaptureController.shared.onRecentsChange = { [weak self] in
+            self?.rebuildStatusMenu()
+        }
         RecordingController.shared.onStateChange = { [weak self] recording in
             self?.recordingStateChanged(recording)
         }
@@ -76,7 +79,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem = item
         applyIdleAppearance()
+        rebuildStatusMenu()
+    }
 
+    /// Builds the menu from scratch. Called again whenever its contents change.
+    private func rebuildStatusMenu() {
         let menu = NSMenu()
         let about = NSMenuItem(title: "Kiwi \(BuildInfo.label)", action: nil, keyEquivalent: "")
         about.isEnabled = false
@@ -91,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(menuItem("Record Screen", #selector(recordScreen), symbol: "menubar.dock.rectangle"))
         menu.addItem(.separator())
         menu.addItem(menuItem("Edit Last Capture", #selector(editLast), key: "2", symbol: "pencil.tip.crop.circle"))
+        menu.addItem(recentCapturesItem())
         menu.addItem(menuItem("Open Screenshots Folder", #selector(openFolder), symbol: "folder"))
         menu.addItem(.separator())
         menu.addItem(menuItem("Settings…", #selector(openSettings), symbol: "gearshape"))
@@ -99,7 +107,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit Kiwi", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
         statusMenu = menu
-        item.menu = menu
+        // While recording, the menu bar item is a stop button with no menu.
+        if !RecordingController.shared.isRecording {
+            statusItem?.menu = menu
+        }
+    }
+
+    private func recentCapturesItem() -> NSMenuItem {
+        let item = NSMenuItem(title: "Recent Captures", action: nil, keyEquivalent: "")
+        item.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil)
+        let submenu = NSMenu()
+        let recents = CaptureController.shared.recents
+        if recents.isEmpty {
+            let empty = NSMenuItem(title: "No captures yet", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            submenu.addItem(empty)
+        }
+        for record in recents {
+            let entry = NSMenuItem(title: record.name, action: #selector(openRecent(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = record.id.uuidString
+            entry.image = record.thumbnail
+            submenu.addItem(entry)
+        }
+        item.submenu = submenu
+        return item
+    }
+
+    @objc private func openRecent(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String, let id = UUID(uuidString: text) else { return }
+        CaptureController.shared.reopen(id)
     }
 
     private func applyIdleAppearance() {
