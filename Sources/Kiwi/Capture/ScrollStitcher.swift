@@ -10,6 +10,11 @@ import Foundation
 /// are new get appended. Frames that cannot be matched are skipped, so
 /// scrolling back up or pausing never corrupts the result.
 ///
+/// Pages that move on their own (a playing video, an animation, a carousel)
+/// are handled by a second, tolerant pass: a shift is still accepted when up
+/// to half of the rows changed by themselves, as long as most of the detailed
+/// rows line up and no other shift explains the frame nearly as well.
+///
 /// Not thread-safe: use from one serial queue.
 final class ScrollStitcher: @unchecked Sendable {
     enum Step {
@@ -31,6 +36,8 @@ final class ScrollStitcher: @unchecked Sendable {
     private let bands = 24
     private let minRegion = 32
     private let minTexture = 8
+    /// Textured rows that must line up before the tolerant pass trusts a shift.
+    private let minAgreeing = 16
 
     private var previous: [UInt8]?
     private var firstFrame: CGImage?
@@ -91,7 +98,26 @@ final class ScrollStitcher: @unchecked Sendable {
             texturedBefore[row + 1] = texturedBefore[row] + (textured ? 1 : 0)
         }
 
+        // A still page with something moving on it: most rows, and most of the
+        // detailed ones, line up without any shift. There is nothing to add.
+        var disagreeing = 0
+        var agreeingTexture = 0
+        for row in regionStart..<regionEnd {
+            if Self.rowAgrees(previous, row, signature, row, b) {
+                agreeingTexture += texturedBefore[row + 1] - texturedBefore[row]
+            } else {
+                disagreeing += 1
+            }
+        }
+        let regionTexture = texturedBefore[regionEnd] - texturedBefore[regionStart]
+        if disagreeing * 5 <= region * 2, agreeingTexture * 2 >= regionTexture {
+            return .idle
+        }
+
         // Coarse search over every possible shift using one value per row.
+        // Each row's error is capped, so rows that changed by themselves
+        // cannot outweigh the rows that simply moved.
+        let coarseCap = b * 8
         let maxShift = region - max(16, region / 6)
         guard maxShift >= 1 else { return .idle }
         var candidates: [(error: Double, shift: Int)] = []
@@ -101,7 +127,7 @@ final class ScrollStitcher: @unchecked Sendable {
             if texturedBefore[regionEnd - shift] - texturedBefore[regionStart] < minTexture { continue }
             var total = 0
             for row in regionStart..<(regionEnd - shift) {
-                total += abs(previousSums[row + shift] - currentSums[row])
+                total += min(abs(previousSums[row + shift] - currentSums[row]), coarseCap)
             }
             candidates.append((Double(total) / Double(rows * b), shift))
         }
@@ -126,7 +152,59 @@ final class ScrollStitcher: @unchecked Sendable {
                 best = key
             }
         }
-        guard let match = best else { return .lost }
+        // Tolerant pass, only when the strict one found nothing: part of the
+        // region is changing by itself. Rows are compared band by band, so a
+        // row still counts when a part of its width moved.
+        if best == nil {
+            var evaluated: [(mismatched: Int, error: Double, shift: Int, rows: Int, agreeing: Int, textured: Int)] = []
+            for candidate in candidates.prefix(8) {
+                let shift = candidate.shift
+                var mismatched = 0
+                var agreeing = 0
+                for row in regionStart..<(regionEnd - shift) {
+                    if Self.rowAgrees(previous, row + shift, signature, row, b) {
+                        agreeing += texturedBefore[row + 1] - texturedBefore[row]
+                    } else {
+                        mismatched += 1
+                    }
+                }
+                evaluated.append((
+                    mismatched: mismatched,
+                    error: candidate.error,
+                    shift: shift,
+                    rows: regionEnd - shift - regionStart,
+                    agreeing: agreeing,
+                    textured: texturedBefore[regionEnd - shift] - texturedBefore[regionStart]
+                ))
+            }
+            let needed = minAgreeing
+            let acceptable = evaluated.filter { entry in
+                entry.mismatched * 2 <= entry.rows && entry.agreeing >= max(needed, entry.textured * 2 / 5)
+            }
+            let pick = acceptable.min { first, second in
+                (first.mismatched, first.error, first.shift) < (second.mismatched, second.error, second.shift)
+            }
+            if let pick {
+                // Refuse when a clearly different shift explains the frame almost as well.
+                let ambiguous = evaluated.contains { other in
+                    abs(other.shift - pick.shift) > 2 && other.agreeing * 2 > pick.agreeing
+                }
+                if !ambiguous {
+                    best = (pick.mismatched, pick.error, pick.shift)
+                }
+            }
+        }
+
+        guard let match = best else {
+            // When only a small part of the frame changed, the page did not
+            // scroll: something on it moved. That is not worth a warning.
+            var changed = 0
+            for row in regionStart..<regionEnd
+            where Self.rowDistance(previous, row, signature, row, b) > staticLimit {
+                changed += 1
+            }
+            return changed * 2 < height ? .idle : .lost
+        }
         let shift = match.2
 
         // Append.
@@ -257,6 +335,18 @@ final class ScrollStitcher: @unchecked Sendable {
             sums[row] = total
         }
         return sums
+    }
+
+    /// True when at least two thirds of the bands of the two rows are close.
+    /// Unlike `rowDistance`, a row still agrees when part of its width changed.
+    private static func rowAgrees(_ a: [UInt8], _ ra: Int, _ b: [UInt8], _ rb: Int, _ bands: Int) -> Bool {
+        var close = 0
+        let aStart = ra * bands
+        let bStart = rb * bands
+        for band in 0..<bands where abs(Int(a[aStart + band]) - Int(b[bStart + band])) <= 6 {
+            close += 1
+        }
+        return close * 3 >= bands * 2
     }
 
     /// Sum of absolute band differences between row `ra` of `a` and row `rb` of `b`.
