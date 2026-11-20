@@ -91,6 +91,34 @@ final class CaptureController {
         }
     }
 
+    /// Timed capture: pick the area now, and Kiwi captures it after a countdown.
+    /// That leaves time to open a menu or hover over something first.
+    func captureAfterDelay(seconds: Int) {
+        selectRegion { [weak self] displayID, rect, screen in
+            guard let self else { return }
+            let border = RegionBorder.make(around: rect, on: screen, color: Theme.kiwiNS)
+            border.orderFrontRegardless()
+            let showCursor = Prefs.shared.showCursor
+            self.countDown(from: max(1, seconds), on: screen) {
+                border.orderOut(nil)
+                self.run(on: screen) {
+                    try await ScreenGrabber.captureDisplay(displayID, rect: rect, showCursor: showCursor)
+                }
+            }
+        }
+    }
+
+    private func countDown(from remaining: Int, on screen: NSScreen, then action: @escaping @MainActor () -> Void) {
+        guard remaining > 0 else {
+            action()
+            return
+        }
+        Toast.show("Capturing in \(remaining)…", symbol: "timer", on: screen)
+        after(1) { [weak self] in
+            self?.countDown(from: remaining - 1, on: screen, then: action)
+        }
+    }
+
     /// Scrolling capture: press once to pick the area, again to finish.
     func captureScrolling() {
         let scroller = ScrollCaptureController.shared
