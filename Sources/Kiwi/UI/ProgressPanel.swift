@@ -47,7 +47,7 @@ final class ProgressPanel {
     func end() {
         generation += 1
         onCancel = nil
-        panel?.orderOut(nil)
+        panel?.disappear()
         panel = nil
     }
 
@@ -65,8 +65,7 @@ final class ProgressPanel {
 
         let area = (NSScreen.underMouse ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let origin = NSPoint(x: area.midX - size.width / 2, y: area.minY + 12)
-        created.setFrame(NSRect(origin: origin, size: size), display: true)
-        created.orderFrontRegardless()
+        created.appear(at: NSRect(origin: origin, size: size))
         panel = created
     }
 }

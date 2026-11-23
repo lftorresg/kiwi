@@ -42,14 +42,13 @@ final class PinController {
             x: area.maxX - size.width - 24 - step,
             y: area.maxY - size.height - 24 - step
         )
-        panel.setFrame(NSRect(origin: origin, size: size), display: true)
-        panel.orderFrontRegardless()
+        panel.appear(at: NSRect(origin: origin, size: size))
         panel.invalidateShadow()
         panels.append(panel)
     }
 
     private func close(_ panel: FloatingPanel) {
-        panel.orderOut(nil)
+        panel.disappear()
         panels.removeAll { $0 === panel }
     }
 

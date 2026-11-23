@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Borderless, transparent, non-activating panel used for every floating
@@ -27,6 +28,39 @@ final class FloatingPanel: NSPanel {
 
     override var canBecomeKey: Bool { allowsKey }
     override var canBecomeMain: Bool { false }
+}
+
+extension FloatingPanel {
+    /// Shows the panel at `frame`, fading in while it settles into place.
+    /// With Reduce Motion on it only fades.
+    func appear(at frame: NSRect, makeKey: Bool = false) {
+        let rise: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0 : 10
+        setFrame(frame.offsetBy(dx: 0, dy: -rise), display: true)
+        alphaValue = 0
+        if makeKey {
+            makeKeyAndOrderFront(nil)
+        } else {
+            orderFrontRegardless()
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.24
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1)
+            animator().alphaValue = 1
+            animator().setFrame(frame, display: true)
+        }
+    }
+
+    /// Fades the panel out, then takes it off screen.
+    func disappear() {
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.16
+            animator().alphaValue = 0
+        }
+        // Holding the panel here keeps it alive until the fade has finished.
+        after(0.18) {
+            self.orderOut(nil)
+        }
+    }
 }
 
 /// Hosting view for floating panels. Its controls respond to the very first

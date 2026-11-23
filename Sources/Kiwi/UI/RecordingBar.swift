@@ -46,13 +46,12 @@ final class RecordingBar {
 
         let area = (NSScreen.underMouse ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
         let origin = NSPoint(x: area.midX - size.width / 2, y: area.minY + 64)
-        bar.setFrame(NSRect(origin: origin, size: size), display: true)
-        bar.makeKeyAndOrderFront(nil)
+        bar.appear(at: NSRect(origin: origin, size: size), makeKey: true)
         panel = bar
     }
 
     func hide() {
-        panel?.orderOut(nil)
+        panel?.disappear()
         panel = nil
     }
 
@@ -202,11 +201,7 @@ final class RecordingPill: NSObject {
         host.frame = NSRect(origin: .zero, size: size)
 
         let area = screen.visibleFrame
-        pill.setFrame(
-            NSRect(x: area.midX - size.width / 2, y: area.minY + 8, width: size.width, height: size.height),
-            display: true
-        )
-        pill.orderFrontRegardless()
+        pill.appear(at: NSRect(x: area.midX - size.width / 2, y: area.minY + 8, width: size.width, height: size.height))
         panel = pill
 
         let tick = Timer(timeInterval: 0.5, target: self, selector: #selector(update), userInfo: nil, repeats: true)
@@ -217,7 +212,7 @@ final class RecordingPill: NSObject {
     func hide() {
         timer?.invalidate()
         timer = nil
-        panel?.orderOut(nil)
+        panel?.disappear()
         panel = nil
     }
 
