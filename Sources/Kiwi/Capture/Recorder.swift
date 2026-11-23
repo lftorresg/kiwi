@@ -57,10 +57,6 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
     private var followMonitor: Any?
     private var currentDisplayID: CGDirectDisplayID?
     private var isSwitching = false
-    /// The live stream settings and the size of the video, kept so the
-    /// picture can be laid out again when the recording moves to another screen.
-    private var configuration: SCStreamConfiguration?
-    private var canvas: CGSize?
 
     /// Starts recording. `rect` is in the display's point space with a top-left
     /// origin; nil records the whole display.
@@ -104,18 +100,22 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
                     display: found.display, content: found.content, rect: rect, showCursor: true
                 )
 
-                let configuration = setup.configuration
+                var configuration = setup.configuration
                 if followsScreens {
-                    // One 16:9 picture for every screen. Each screen is scaled
-                    // to fit and centred on black, so screens of different
-                    // shapes and sizes all look right in the same video.
-                    let screenPixels = CGSize(width: configuration.width, height: configuration.height)
+                    // One 16:9 picture for every screen. These settings name no
+                    // particular part of a screen, so whichever screen the
+                    // stream is pointed at is captured whole and scaled to fit
+                    // the picture. That matters because changing the settings
+                    // in the middle of a recording ended it when Kiwi tried, so
+                    // on a switch only the screen being captured changes.
                     let frame = Self.followCanvas(maxHeight: maxHeight)
-                    configuration.width = Int(frame.width)
-                    configuration.height = Int(frame.height)
-                    configuration.destinationRect = Self.fitted(screenPixels, in: frame)
-                    StreamBackground.setBlack(on: configuration)
-                    self.canvas = frame
+                    let whole = SCStreamConfiguration()
+                    whole.width = Int(frame.width)
+                    whole.height = Int(frame.height)
+                    whole.showsCursor = true
+                    whole.captureResolution = .best
+                    StreamBackground.setBlack(on: whole)
+                    configuration = whole
                 } else {
                     let size = Self.videoSize(
                         width: configuration.width, height: configuration.height, maxHeight: maxHeight
@@ -159,7 +159,6 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
                 self.stream = stream
                 self.output = output
                 self.outputURL = url
-                self.configuration = configuration
                 self.startedAt = Date()
                 self.isBusy = false
                 self.isRecording = true
@@ -221,8 +220,6 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
         }
         followMonitor = nil
         currentDisplayID = nil
-        configuration = nil
-        canvas = nil
         isSwitching = false
         RecordingPill.shared.hide()
         borderPanel?.orderOut(nil)
@@ -252,15 +249,8 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
                 let setup = try ScreenGrabber.regionSetup(
                     display: found.display, content: found.content, rect: nil, showCursor: true
                 )
-                // Lay the new screen out in the same picture: its whole area,
-                // scaled to fit and centred.
-                if let configuration = self.configuration, let frame = self.canvas {
-                    configuration.sourceRect = setup.configuration.sourceRect
-                    configuration.destinationRect = Self.fitted(
-                        CGSize(width: setup.configuration.width, height: setup.configuration.height), in: frame
-                    )
-                    try await stream.updateConfiguration(configuration)
-                }
+                // Only the screen changes. The stream's settings stay as they
+                // are, and they capture whichever screen this is in full.
                 try await stream.updateContentFilter(setup.filter)
                 if self.isRecording {
                     self.currentDisplayID = displayID
@@ -349,23 +339,6 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
         height = max(360, (height / 2).rounded(.down) * 2)
         let width = (height * 16 / 9 / 2).rounded(.down) * 2
         return CGSize(width: width, height: height)
-    }
-
-    /// Where a picture of size `source` goes inside `frame`: as large as it
-    /// fits without changing shape, and centred.
-    static func fitted(_ source: CGSize, in frame: CGSize) -> CGRect {
-        guard source.width > 0, source.height > 0 else {
-            return CGRect(origin: .zero, size: frame)
-        }
-        let scale = min(frame.width / source.width, frame.height / source.height)
-        let width = (source.width * scale).rounded(.down)
-        let height = (source.height * scale).rounded(.down)
-        return CGRect(
-            x: ((frame.width - width) / 2).rounded(.down),
-            y: ((frame.height - height) / 2).rounded(.down),
-            width: width,
-            height: height
-        )
     }
 
     private static func thumbnail(for url: URL) async -> NSImage? {
