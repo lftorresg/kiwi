@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -126,9 +127,16 @@ final class EditorWindow: NSWindow {
 }
 
 @MainActor
-final class EditorWindowController: NSObject, NSWindowDelegate {
+final class EditorWindowController: NSObject, NSWindowDelegate, NSToolbarDelegate {
     let capture: Capture
     var onClose: (() -> Void)?
+
+    // Toolbar pieces that follow the model.
+    private let nameField = NSTextField()
+    private var toolsItem: NSToolbarItemGroup?
+    private var historyItem: NSToolbarItemGroup?
+    private var noBackdropItem: NSMenuItem?
+    private var subscription: AnyCancellable?
 
     private let model: EditorModel
     private let canvas: EditorCanvasView
@@ -165,7 +173,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         super.init()
 
         window.title = capture.name
-        window.titlebarAppearsTransparent = true
+        installToolbar()
         window.backgroundColor = .underPageBackgroundColor
         window.isReleasedWhenClosed = false
         window.contentMinSize = EditorLayout.minimumWindowSize
@@ -175,7 +183,7 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         window.gestureTarget = canvas
         canvas.onDone = { [weak self] in self?.perform(.done) }
 
-        let root = EditorRootView(model: model, canvas: canvas) { [weak self] command in
+        let root = EditorRootView(model: editorModel, canvas: canvas) { [weak self] command in
             self?.perform(command)
         }
         let host = NSHostingView(rootView: root)
@@ -189,11 +197,19 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     @discardableResult
     private func applyName() -> Bool {
         let before = capture.name
+        // The name field in the toolbar is what the user sees, so it wins.
+        let typed = nameField.stringValue
+        if !typed.isEmpty, typed != model.captureName {
+            model.captureName = typed
+        }
         let applied = CaptureController.shared.rename(capture, to: model.captureName)
         if model.captureName != applied {
             model.captureName = applied
         }
         window.title = applied
+        if nameField.stringValue != applied {
+            nameField.stringValue = applied
+        }
         return applied != before
     }
 
@@ -225,6 +241,230 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
         after(0.3) {
             handler?()
         }
+    }
+
+    // MARK: Toolbar
+
+    private func installToolbar() {
+        let toolbar = NSToolbar(identifier: "kiwi.editor")
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        toolbar.centeredItemIdentifiers = [.editorTools]
+        window.toolbar = toolbar
+        window.toolbarStyle = .unified
+        window.titleVisibility = .hidden
+
+        subscription = model.objectWillChange.sink { [weak self] _ in
+            // objectWillChange fires before the change lands; read it on the next turn.
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.syncToolbar()
+                }
+            }
+        }
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.editorName, .flexibleSpace, .editorTools, .flexibleSpace,
+         .editorHistory, .editorRedact, .editorText, .editorBackdrop, .editorZoom]
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        toolbarDefaultItemIdentifiers(toolbar)
+    }
+
+    func toolbar(
+        _ toolbar: NSToolbar,
+        itemForItemIdentifier identifier: NSToolbarItem.Identifier,
+        willBeInsertedIntoToolbar flag: Bool
+    ) -> NSToolbarItem? {
+        switch identifier {
+        case .editorName:
+            let item = NSToolbarItem(itemIdentifier: identifier)
+            item.label = "Name"
+            item.toolTip = "Rename this capture: type a name and press Return"
+            nameField.stringValue = model.captureName
+            nameField.placeholderString = "Name"
+            nameField.bezelStyle = .roundedBezel
+            nameField.lineBreakMode = .byTruncatingMiddle
+            nameField.target = self
+            nameField.action = #selector(nameSubmitted)
+            nameField.translatesAutoresizingMaskIntoConstraints = false
+            nameField.widthAnchor.constraint(equalToConstant: 190).isActive = true
+            item.view = nameField
+            return item
+
+        case .editorTools:
+            let tools = Tool.allCases
+            let group = NSToolbarItemGroup(
+                itemIdentifier: identifier,
+                images: tools.map { Self.symbol($0.symbol, $0.title) },
+                selectionMode: .selectOne,
+                labels: tools.map(\.title),
+                target: self,
+                action: #selector(toolPicked(_:))
+            )
+            group.label = "Tools"
+            group.controlRepresentation = .expanded
+            group.visibilityPriority = .high
+            for (item, tool) in zip(group.subitems, tools) {
+                item.toolTip = "\(tool.title) (\(tool.key.uppercased()))"
+            }
+            group.selectedIndex = tools.firstIndex(of: model.tool) ?? 0
+            toolsItem = group
+            return group
+
+        case .editorHistory:
+            let group = NSToolbarItemGroup(
+                itemIdentifier: identifier,
+                images: [Self.symbol("arrow.uturn.backward", "Undo"), Self.symbol("arrow.uturn.forward", "Redo")],
+                selectionMode: .momentary,
+                labels: ["Undo", "Redo"],
+                target: self,
+                action: #selector(historyPicked(_:))
+            )
+            group.label = "Undo and Redo"
+            group.controlRepresentation = .expanded
+            let tips = ["Undo (⌘Z)", "Redo (⇧⌘Z)"]
+            for (item, tip) in zip(group.subitems, tips) {
+                item.toolTip = tip
+                item.autovalidates = false
+            }
+            historyItem = group
+            syncToolbar()
+            return group
+
+        case .editorRedact:
+            return button(identifier, "Redact", "wand.and.stars", #selector(redactPicked),
+                          tip: "Redact: find and cover emails, phone numbers, cards, IDs, keys and addresses (⌘R)")
+
+        case .editorText:
+            return button(identifier, "Copy Text", "text.viewfinder", #selector(textPicked),
+                          tip: "Copy text: drag over the part you want. ⇧⌘C copies all the text in the image.")
+
+        case .editorBackdrop:
+            let item = NSMenuToolbarItem(itemIdentifier: identifier)
+            item.label = "Background"
+            item.image = Self.symbol("rectangle.inset.filled", "Background")
+            item.toolTip = "Background: set the image on a coloured backdrop with rounded corners and a shadow"
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            for backdrop in Backdrop.allCases {
+                let entry = NSMenuItem(title: backdrop.title, action: #selector(backdropPicked(_:)), keyEquivalent: "")
+                entry.target = self
+                entry.representedObject = backdrop.rawValue
+                menu.addItem(entry)
+            }
+            menu.addItem(.separator())
+            let none = NSMenuItem(title: "No Background", action: #selector(backdropCleared), keyEquivalent: "")
+            none.target = self
+            none.isEnabled = model.hasBackdrop
+            menu.addItem(none)
+            noBackdropItem = none
+            item.menu = menu
+            return item
+
+        case .editorZoom:
+            let group = NSToolbarItemGroup(
+                itemIdentifier: identifier,
+                images: [
+                    Self.symbol("minus.magnifyingglass", "Zoom Out"),
+                    Self.symbol("arrow.up.left.and.arrow.down.right", "Fit"),
+                    Self.symbol("plus.magnifyingglass", "Zoom In"),
+                ],
+                selectionMode: .momentary,
+                labels: ["Zoom Out", "Zoom to Fit", "Zoom In"],
+                target: self,
+                action: #selector(zoomPicked(_:))
+            )
+            group.label = "Zoom"
+            group.controlRepresentation = .expanded
+            let tips = ["Zoom out (⌘−)", "Fit to window (⌘0). ⌘1 shows actual size.", "Zoom in (⌘+)"]
+            for (item, tip) in zip(group.subitems, tips) {
+                item.toolTip = tip
+            }
+            return group
+
+        default:
+            return nil
+        }
+    }
+
+    private func button(
+        _ identifier: NSToolbarItem.Identifier, _ label: String, _ symbolName: String, _ action: Selector, tip: String
+    ) -> NSToolbarItem {
+        let item = NSToolbarItem(itemIdentifier: identifier)
+        item.label = label
+        item.image = Self.symbol(symbolName, label)
+        item.toolTip = tip
+        item.isBordered = true
+        item.target = self
+        item.action = action
+        return item
+    }
+
+    private static func symbol(_ name: String, _ description: String) -> NSImage {
+        NSImage(systemSymbolName: name, accessibilityDescription: description) ?? NSImage()
+    }
+
+    /// Brings the toolbar in line with the model after any change.
+    private func syncToolbar() {
+        if let index = Tool.allCases.firstIndex(of: model.tool), let tools = toolsItem, tools.selectedIndex != index {
+            tools.selectedIndex = index
+        }
+        if let history = historyItem, history.subitems.count == 2 {
+            history.subitems[0].isEnabled = model.canUndo
+            history.subitems[1].isEnabled = model.canRedo
+        }
+        noBackdropItem?.isEnabled = model.hasBackdrop
+        if nameField.currentEditor() == nil, nameField.stringValue != model.captureName {
+            nameField.stringValue = model.captureName
+        }
+    }
+
+    @objc private func nameSubmitted() {
+        perform(.rename)
+    }
+
+    @objc private func toolPicked(_ sender: Any?) {
+        guard let group = sender as? NSToolbarItemGroup else { return }
+        let tools = Tool.allCases
+        guard tools.indices.contains(group.selectedIndex) else { return }
+        canvas.commitText()
+        model.tool = tools[group.selectedIndex]
+        window.makeFirstResponder(canvas)
+    }
+
+    @objc private func historyPicked(_ sender: Any?) {
+        guard let group = sender as? NSToolbarItemGroup else { return }
+        perform(group.selectedIndex == 0 ? .undo : .redo)
+    }
+
+    @objc private func zoomPicked(_ sender: Any?) {
+        guard let group = sender as? NSToolbarItemGroup else { return }
+        switch group.selectedIndex {
+        case 0: perform(.zoomOut)
+        case 1: perform(.zoomFit)
+        default: perform(.zoomIn)
+        }
+    }
+
+    @objc private func redactPicked() {
+        perform(.autoRedact)
+    }
+
+    @objc private func textPicked() {
+        perform(.pickText)
+    }
+
+    @objc private func backdropPicked(_ sender: NSMenuItem) {
+        guard let name = sender.representedObject as? String, let backdrop = Backdrop(rawValue: name) else { return }
+        perform(.backdrop(backdrop))
+    }
+
+    @objc private func backdropCleared() {
+        perform(.backdrop(nil))
     }
 
     // MARK: Commands
@@ -428,7 +668,19 @@ final class EditorWindowController: NSObject, NSWindowDelegate {
     }
 }
 
-// MARK: - SwiftUI chrome
+// MARK: - Toolbar identifiers
+
+private extension NSToolbarItem.Identifier {
+    static let editorName = NSToolbarItem.Identifier("kiwi.editor.name")
+    static let editorTools = NSToolbarItem.Identifier("kiwi.editor.tools")
+    static let editorHistory = NSToolbarItem.Identifier("kiwi.editor.history")
+    static let editorRedact = NSToolbarItem.Identifier("kiwi.editor.redact")
+    static let editorText = NSToolbarItem.Identifier("kiwi.editor.text")
+    static let editorBackdrop = NSToolbarItem.Identifier("kiwi.editor.backdrop")
+    static let editorZoom = NSToolbarItem.Identifier("kiwi.editor.zoom")
+}
+
+// MARK: - Window content
 
 private struct CanvasRepresentable: NSViewRepresentable {
     let canvas: EditorCanvasView
@@ -437,324 +689,62 @@ private struct CanvasRepresentable: NSViewRepresentable {
     func updateNSView(_ nsView: EditorCanvasView, context: Context) {}
 }
 
+/// The canvas, with a bar below it for colour, size and what to do with the
+/// result. Tools, history and zoom are in the window's toolbar.
 private struct EditorRootView: View {
     @ObservedObject var model: EditorModel
     let canvas: EditorCanvasView
     let perform: (EditorCommand) -> Void
 
     var body: some View {
-        GeometryReader { geometry in
-            chrome(width: geometry.size.width)
-        }
-    }
-
-    /// The canvas with the floating controls on top, arranged for `width`.
-    private func chrome(width: CGFloat) -> some View {
-        ZStack {
+        VStack(spacing: 0) {
             CanvasRepresentable(canvas: canvas)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                topControls(EditorLayout.top(forWidth: width))
-                Spacer(minLength: 0)
-                bottomControls(EditorLayout.bottom(forWidth: width))
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 16)
-        }
-    }
-
-    // MARK: Rows
-
-    @ViewBuilder
-    private func topControls(_ layout: EditorLayout.Top) -> some View {
-        switch layout {
-        case .full:
-            HStack(alignment: .top, spacing: 12) {
-                nameField(maxWidth: 230)
-                Spacer(minLength: 0)
-                toolBar(redactLabel: true)
-            }
-        case .medium:
-            HStack(alignment: .top, spacing: 12) {
-                nameField(maxWidth: 150)
-                Spacer(minLength: 0)
-                toolBar(redactLabel: false)
-            }
-        case .stacked:
-            VStack(spacing: 6) {
-                HStack(spacing: 12) {
-                    nameField(maxWidth: .infinity)
-                    utilityBar
+            Divider()
+            // Labels go first when space is short, then the bar takes two rows.
+            ViewThatFits(in: .horizontal) {
+                row(labels: true)
+                row(labels: false)
+                VStack(spacing: 8) {
+                    StyleControls(model: model)
+                    actions(labels: false)
                 }
-                toolStrip
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
             }
+            .frame(maxWidth: .infinity)
+            .background(.bar)
         }
     }
 
-    @ViewBuilder
-    private func bottomControls(_ layout: EditorLayout.Bottom) -> some View {
-        switch layout {
-        case .full:
-            HStack(alignment: .bottom, spacing: 12) {
-                styleBar
-                Spacer(minLength: 0)
-                actionBar(showLabels: true)
-            }
-        case .icons:
-            HStack(alignment: .bottom, spacing: 12) {
-                styleBar
-                Spacer(minLength: 0)
-                actionBar(showLabels: false)
-            }
-        case .stacked:
-            VStack(spacing: 8) {
-                styleBar
-                actionBar(showLabels: false)
-            }
-        }
-    }
-
-    // MARK: Top pieces
-
-    /// The capture's name. Editing it renames the capture.
-    private func nameField(maxWidth: CGFloat) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: "pencil")
-                .font(.system(size: 12, weight: .semibold))
+    private func row(labels: Bool) -> some View {
+        HStack(spacing: 12) {
+            StyleControls(model: model)
+            Spacer(minLength: 12)
+            Text("\(model.zoomPercent)%")
+                .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
-            TextField("Name this capture", text: $model.captureName)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12.5, weight: .medium))
-                .onSubmit { perform(.rename) }
+                .help("Zoom. Pinch or ⌘-scroll to change it.")
+            actions(labels: labels)
         }
         .padding(.horizontal, 14)
-        .frame(minWidth: 110, maxWidth: maxWidth)
-        .frame(height: 42)
-        .glassEffect(.regular, in: .capsule)
-        .help("Rename this capture: type a name and press Return")
+        .padding(.vertical, 9)
     }
 
-    /// Everything on one capsule: tools, history, redact, zoom.
-    private func toolBar(redactLabel: Bool) -> some View {
-        HStack(spacing: 2) {
-            toolButtons
-            separator
-            historyButtons
-            separator
-            redactButton(showLabel: redactLabel)
-            textButton
-            backdropMenu
-            separator
-            zoomControls
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .glassEffect(.regular, in: .capsule)
-    }
-
-    /// The drawing tools alone, for the second row of a narrow window.
-    private var toolStrip: some View {
-        HStack(spacing: 2) {
-            toolButtons
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .glassEffect(.regular, in: .capsule)
-    }
-
-    /// History, redact and zoom, beside the name in a narrow window.
-    private var utilityBar: some View {
-        HStack(spacing: 2) {
-            historyButtons
-            separator
-            redactButton(showLabel: false)
-            textButton
-            backdropMenu
-            separator
-            zoomControls
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .glassEffect(.regular, in: .capsule)
-    }
-
-    /// Sets the image on a coloured backdrop, or takes the backdrop away.
-    private var backdropMenu: some View {
-        Menu {
-            ForEach(Backdrop.allCases) { backdrop in
-                Button(backdrop.title) { perform(.backdrop(backdrop)) }
-            }
-            Divider()
-            Button("No Background") { perform(.backdrop(nil)) }
-                .disabled(!model.hasBackdrop)
-        } label: {
-            Image(systemName: "rectangle.inset.filled")
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help("Background: set the image on a coloured backdrop with rounded corners and a shadow")
-    }
-
-    private var textButton: some View {
-        Button { perform(.pickText) } label: {
-            Image(systemName: "text.viewfinder")
-                .font(.system(size: 13, weight: .medium))
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help("Copy text: drag over the part you want. ⇧⌘C copies all the text in the image.")
-    }
-
-    private var separator: some View {
-        Divider()
-            .frame(height: 18)
-            .padding(.horizontal, 6)
-    }
-
-    private var toolButtons: some View {
-        ForEach(Tool.allCases) { tool in
-            Button {
-                canvas.commitText()
-                model.tool = tool
-            } label: {
-                Image(systemName: tool.symbol)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(model.tool == tool ? Color.white : Color.primary)
-                    .frame(width: 32, height: 32)
-                    .background {
-                        if model.tool == tool {
-                            Circle().fill(Theme.kiwi)
-                        }
-                    }
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .help("\(tool.title) (\(tool.key.uppercased()))")
-        }
-    }
-
-    private var historyButtons: some View {
-        HStack(spacing: 2) {
-            Button { perform(.undo) } label: {
-                Image(systemName: "arrow.uturn.backward")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 30, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!model.canUndo)
-            .help("Undo (⌘Z)")
-
-            Button { perform(.redo) } label: {
-                Image(systemName: "arrow.uturn.forward")
-                    .font(.system(size: 13, weight: .medium))
-                    .frame(width: 30, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(!model.canRedo)
-            .help("Redo (⇧⌘Z)")
-        }
-    }
-
-    private func redactButton(showLabel: Bool) -> some View {
-        Button { perform(.autoRedact) } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "wand.and.stars")
-                if showLabel {
-                    Text("Redact")
-                }
-            }
-            .font(.system(size: 12.5, weight: .semibold))
-            .padding(.horizontal, showLabel ? 10 : 8)
-            .frame(height: 30)
-            .background(Capsule().fill(Color.primary.opacity(0.1)))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .help("Redact: find and cover emails, phone numbers, cards, IDs, keys and addresses (⌘R)")
-    }
-
-    private var zoomControls: some View {
-        HStack(spacing: 0) {
-            Button { perform(.zoomOut) } label: {
-                Image(systemName: "minus")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 24, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Zoom out (⌘−)")
-
-            Button { perform(.zoomFit) } label: {
-                Text("\(model.zoomPercent)%")
-                    .font(.system(size: 11.5, weight: .medium).monospacedDigit())
-                    .frame(width: 44, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Fit to window (⌘0). ⌘1 shows actual size. Pinch or ⌘-scroll to zoom.")
-
-            Button { perform(.zoomIn) } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 24, height: 32)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Zoom in (⌘+)")
-        }
-    }
-
-    // MARK: Bottom pieces
-
-    /// Colour and size.
-    private var styleBar: some View {
-        StyleControls(model: model)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .glassEffect(.regular, in: .capsule)
-    }
-
-    /// A button label that keeps its icon and drops its text when space is short.
-    @ViewBuilder
-    private func actionLabel(_ title: String, _ symbol: String, showLabel: Bool) -> some View {
-        if showLabel {
-            Label(title, systemImage: symbol)
-        } else {
-            Image(systemName: symbol)
-        }
-    }
-
-    /// What to do with the result.
-    private func actionBar(showLabels: Bool) -> some View {
+    private func actions(labels: Bool) -> some View {
         HStack(spacing: 8) {
-            Button { perform(.delete) } label: {
+            Button(role: .destructive) { perform(.delete) } label: {
                 Image(systemName: "trash")
-                    .foregroundStyle(.red)
             }
-            .buttonBorderShape(.circle)
-            .buttonStyle(.glass)
             .help("Delete this screenshot (⌘⌫)")
 
             Button { perform(.pin) } label: {
                 Image(systemName: "pin")
             }
-            .buttonBorderShape(.circle)
-            .buttonStyle(.glass)
             .help("Pin: keep this image floating above your other windows")
 
             Button { perform(.save) } label: {
-                actionLabel("Save", "square.and.arrow.down", showLabel: showLabels)
+                actionLabel("Save", "square.and.arrow.down", labels)
             }
-            .buttonStyle(.glass)
             .help("Save to your screenshots folder (⌘S). ⇧⌘S to choose a location.")
 
             Menu {
@@ -762,26 +752,32 @@ private struct EditorRootView: View {
                     Button("Save as \(format.title)") { perform(.export(format)) }
                 }
             } label: {
-                actionLabel("Convert", "arrow.triangle.2.circlepath", showLabel: showLabels)
+                actionLabel("Convert", "arrow.triangle.2.circlepath", labels)
             }
-            .buttonStyle(.glass)
             .fixedSize()
             .help("Convert: save the edited image to your screenshots folder in another format")
 
             Button { perform(.copy) } label: {
-                actionLabel("Copy", "doc.on.doc", showLabel: showLabels)
+                actionLabel("Copy", "doc.on.doc", labels)
             }
-            .buttonStyle(.glass)
             .help("Copy to clipboard (⌘C)")
 
-            Button { perform(.done) } label: {
-                Label("Done", systemImage: "checkmark")
-            }
-            .buttonStyle(.glassProminent)
-            .tint(Theme.kiwi)
-            .help("Copy and close (Return)")
+            Button("Done") { perform(.done) }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.kiwi)
+                .help("Copy and close (Return)")
         }
         .controlSize(.large)
+    }
+
+    /// A button label that keeps its icon and drops its text when space is short.
+    @ViewBuilder
+    private func actionLabel(_ title: String, _ symbol: String, _ showLabel: Bool) -> some View {
+        if showLabel {
+            Label(title, systemImage: symbol)
+        } else {
+            Image(systemName: symbol)
+        }
     }
 }
 

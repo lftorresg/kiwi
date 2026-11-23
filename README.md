@@ -116,7 +116,9 @@ Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles. 
 | ⌫ | Delete the selected annotation |
 | ⌘⌫ | Delete the screenshot |
 
-Type in the name field at the top left of the editor and press Return to rename a capture. The name is used for Save, Convert, Save As and drag-out, and a file that was already saved is renamed on disk.
+The editor is a regular macOS window: tools, undo, redact, background and zoom are in its toolbar, and colour, size and the actions are in the bar under the image. When the window is narrow the toolbar folds extra items into its overflow menu.
+
+Type in the name field at the left of the toolbar and press Return to rename a capture. The name is used for Save, Convert, Save As and drag-out, and a file that was already saved is renamed on disk.
 
 The background button in the toolbar sets the image on a gradient backdrop with rounded corners and a soft shadow, which looks better when you share a screenshot of a window or a snippet. Pick another backdrop to swap it, *No Background* to remove it, or undo.
 
