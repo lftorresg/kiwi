@@ -114,7 +114,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
                     configuration.width = Int(frame.width)
                     configuration.height = Int(frame.height)
                     configuration.destinationRect = Self.fitted(screenPixels, in: frame)
-                    configuration.backgroundColor = CGColor(gray: 0, alpha: 1)
+                    StreamBackground.setBlack(on: configuration)
                     self.canvas = frame
                 } else {
                     let size = Self.videoSize(

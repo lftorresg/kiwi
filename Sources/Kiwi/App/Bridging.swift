@@ -1,4 +1,5 @@
 import AppKit
+import ScreenCaptureKit
 
 // The few places where Kiwi has to touch an API that Swift's strict memory
 // safety checking flags. Each one is safe as used here, and keeping them in
@@ -41,6 +42,19 @@ enum Coordination {
         }
         if let coordinationError { throw coordinationError }
         if let bodyError { throw bodyError }
+    }
+}
+
+enum StreamBackground {
+    /// Lives for as long as Kiwi runs. It has to: see below.
+    private static let black = CGColor(gray: 0, alpha: 1)
+
+    /// Fills the parts of a recording that the screen does not cover with black.
+    static func setBlack(on configuration: SCStreamConfiguration) {
+        // ScreenCaptureKit keeps this colour without retaining it, so a colour
+        // made on the spot would be freed while the stream still points at it.
+        // The one above is never freed, which is what makes this safe.
+        unsafe configuration.backgroundColor = black
     }
 }
 
