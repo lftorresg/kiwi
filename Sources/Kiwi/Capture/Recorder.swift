@@ -6,7 +6,7 @@ import ScreenCaptureKit
 /// ScreenCaptureKit's own recording output. No frames or audio pass through Kiwi.
 /// The file is MP4, or MOV when the microphone is recorded.
 @MainActor
-final class RecordingController: NSObject, SCRecordingOutputDelegate {
+final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDelegate {
     static let shared = RecordingController()
 
     /// Called on the main actor whenever recording starts or stops.
@@ -114,7 +114,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
                 recordingConfiguration.outputFileType = microphone ? .mov : .mp4
                 recordingConfiguration.videoCodecType = useHEVC ? .hevc : .h264
 
-                let stream = SCStream(filter: setup.filter, configuration: configuration, delegate: nil)
+                let stream = SCStream(filter: setup.filter, configuration: configuration, delegate: self)
                 let output = SCRecordingOutput(configuration: recordingConfiguration, delegate: self)
                 try stream.addRecordingOutput(output)
                 try await stream.startCapture()
@@ -136,12 +136,24 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
 
     /// Stops recording and shows the finished file.
     func stop() {
-        guard isRecording, !isBusy, let stream else { return }
+        guard isRecording, !isBusy else { return }
+        finish()
+    }
+
+    /// Ends the recording and shows the file. Also used when the recording
+    /// was ended from outside Kiwi, for example with the screen recording
+    /// control that macOS itself puts in the menu bar.
+    private func finish() {
+        guard let stream else {
+            reset()
+            return
+        }
         isBusy = true
         let url = outputURL
         let screen = self.screen
 
         Task { @MainActor in
+            // Harmless when the stream has already stopped.
             try? await stream.stopCapture()
             // Give the writer a moment to finalize the file.
             var waited = 0
@@ -183,6 +195,21 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
     nonisolated func recordingOutputDidFinishRecording(_ recordingOutput: SCRecordingOutput) {
         Task { @MainActor in
             self.didFinishWriting = true
+            // Finished without Kiwi asking: something else ended the recording.
+            if self.isRecording, !self.isBusy {
+                self.finish()
+            }
+        }
+    }
+
+    // MARK: SCStreamDelegate (called on a background queue)
+
+    nonisolated func stream(_ stream: SCStream, didStopWithError error: Error) {
+        let description = error.localizedDescription
+        Task { @MainActor in
+            guard self.isRecording, !self.isBusy else { return }
+            NSLog("Kiwi: the capture stream was stopped: %@", description)
+            self.finish()
         }
     }
 
@@ -191,9 +218,9 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
         Task { @MainActor in
             NSLog("Kiwi: recording failed: %@", description)
             self.didFinishWriting = true
+            // Keep whatever was written; finish() reports it if there is no file.
             if self.isRecording, !self.isBusy {
-                self.reset()
-                Toast.error("Recording stopped unexpectedly")
+                self.finish()
             }
         }
     }
