@@ -179,32 +179,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// While recording, the menu bar item turns into a stop button with a timer.
     private func recordingStateChanged(_ recording: Bool) {
-        guard let item = statusItem, let button = item.button else { return }
-
-        if recording {
-            // A plain red Stop button, the same size as the usual icon. The
-            // elapsed time is in the floating Stop pill instead: a title that
-            // changes every second makes macOS lay the menu bar out again and
-            // redraw this item for every screen, which measured at about a
-            // tenth of a processor core for the whole recording.
-            item.menu = nil
-            let configuration = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-            let image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: "Stop recording")?
-                .withSymbolConfiguration(configuration)
-            image?.isTemplate = false
-            button.image = image
-            button.title = image == nil ? "■" : ""
-            button.imagePosition = .imageOnly
-            if let keys = Prefs.shared.shortcut(for: .record) {
-                button.toolTip = "Stop recording (\(keys.display))"
-            } else {
-                button.toolTip = "Stop recording"
-            }
-            button.target = self
-            button.action = #selector(stopRecording)
-        } else {
+        // Kiwi's menu bar item hides for the length of a recording. Profiles
+        // of recordings showed that most of Kiwi's processor time was AppKit
+        // redrawing this item again and again for every screen's menu bar,
+        // whatever it displayed. With no item there is nothing to redraw.
+        // The Stop pill, the shortcut and the recording control that macOS
+        // itself puts in the menu bar all still stop the recording.
+        statusItem?.isVisible = !recording
+        if !recording {
             applyIdleAppearance()
-            item.menu = statusMenu
+            statusItem?.menu = statusMenu
         }
     }
 
@@ -258,7 +242,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func captureScrolling() { CaptureController.shared.captureScrolling() }
     @objc private func recordArea() { CaptureController.shared.toggleRecording() }
     @objc private func recordNow() { CaptureController.shared.recordNow() }
-    @objc private func stopRecording() { RecordingController.shared.stop() }
     @objc private func gifLast() { CaptureController.shared.makeGIFOfLastRecording() }
     @objc private func editLast() { CaptureController.shared.editLast() }
     @objc private func pinLast() { CaptureController.shared.pinLast() }

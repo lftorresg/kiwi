@@ -280,7 +280,7 @@ struct SettingsView: View {
 
     private var recordingHint: String {
         let keys = prefs.shortcut(for: .record).map { " or with \($0.display)" } ?? ""
-        return "Recordings are saved in the same folder as screenshots. Stop from the menu bar\(keys)."
+        return "Recordings are saved in the same folder as screenshots. Stop with the floating Stop button\(keys)."
     }
 
     private var systemSection: some View {

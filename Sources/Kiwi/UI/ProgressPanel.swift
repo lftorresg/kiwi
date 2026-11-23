@@ -59,6 +59,9 @@ final class ProgressPanel {
         let fitting = host.fittingSize
         let size = NSSize(width: ceil(fitting.width), height: ceil(fitting.height))
 
+        // Fixed size: no need to measure again on every progress update.
+        host.sizingOptions = []
+
         let created = FloatingPanel(size: size, level: .statusBar)
         created.contentView = host
         host.frame = NSRect(origin: .zero, size: size)

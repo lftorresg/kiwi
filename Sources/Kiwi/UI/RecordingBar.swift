@@ -214,6 +214,10 @@ final class RecordingPill: NSObject {
         let fitting = host.fittingSize
         let size = NSSize(width: ceil(fitting.width), height: ceil(fitting.height))
 
+        // The pill keeps this size. Without this, SwiftUI works its size out
+        // again every time the clock ticks.
+        host.sizingOptions = []
+
         let pill = FloatingPanel(size: size, level: .statusBar)
         pill.isMovable = true
         pill.isMovableByWindowBackground = true
