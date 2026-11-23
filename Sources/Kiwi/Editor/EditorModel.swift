@@ -11,7 +11,10 @@ final class EditorModel: ObservableObject {
 
     @Published var tool: Tool = .pen
     @Published var colorIndex = 0
-    @Published var weight: Weight = .medium
+    /// A colour chosen in the system colour panel. Nil while a palette colour is in use.
+    @Published private(set) var customColor: NSColor?
+    /// Stroke thickness in points, set with the size slider.
+    @Published private(set) var thickness: CGFloat = 4
     @Published var selectedID: UUID?
     @Published private(set) var base: CGImage
     @Published private(set) var annotations: [Annotation] = []
@@ -50,9 +53,12 @@ final class EditorModel: ObservableObject {
 
     // MARK: Style
 
-    var color: NSColor { Theme.palette[colorIndex] }
-    var strokeWidth: CGFloat { weight.stroke * scale }
-    var fontSize: CGFloat { weight.font * scale }
+    static let thicknessRange: ClosedRange<CGFloat> = 1...20
+
+    var color: NSColor { customColor ?? Theme.palette[colorIndex] }
+    var strokeWidth: CGFloat { thickness * scale }
+    /// Text grows with the same slider: 22 pt at the default thickness.
+    var fontSize: CGFloat { (thickness * 4.5 + 4) * scale }
 
     var pixelSize: CGSize { CGSize(width: base.width, height: base.height) }
     var pixelBounds: CGRect { CGRect(origin: .zero, size: pixelSize) }
@@ -60,17 +66,36 @@ final class EditorModel: ObservableObject {
 
     func setColor(_ index: Int) {
         colorIndex = index
+        customColor = nil
         restyleSelection()
     }
 
-    func setWeight(_ newWeight: Weight) {
-        weight = newWeight
-        restyleSelection()
+    func setCustomColor(_ color: NSColor) {
+        customColor = color.usingColorSpace(.sRGB) ?? color
+        restyleSelection(coalescing: true)
     }
 
-    private func restyleSelection() {
+    func setThickness(_ value: CGFloat) {
+        let range = EditorModel.thicknessRange
+        thickness = min(max(value, range.lowerBound), range.upperBound)
+        restyleSelection(coalescing: true)
+    }
+
+    /// The selection last restyled by a slider or the colour panel, and when.
+    private var lastRestyle: (id: UUID, at: Date)?
+
+    /// Applies the current colour and size to the selected annotation.
+    /// Dragging a slider or the colour wheel sends many values in a row;
+    /// with `coalescing` they count as a single undo step.
+    private func restyleSelection(coalescing: Bool = false) {
         guard let id = selectedID, let index = annotations.firstIndex(where: { $0.id == id }) else { return }
-        checkpoint()
+        let now = Date()
+        var continuing = false
+        if coalescing, let last = lastRestyle, last.id == id, now.timeIntervalSince(last.at) < 1.5 {
+            continuing = true
+        }
+        if !continuing { checkpoint() }
+        lastRestyle = coalescing ? (id, now) : nil
         annotations[index].color = color
         annotations[index].width = strokeWidth
         annotations[index].fontSize = fontSize

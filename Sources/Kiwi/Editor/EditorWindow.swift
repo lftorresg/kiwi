@@ -715,62 +715,12 @@ private struct EditorRootView: View {
 
     // MARK: Bottom pieces
 
-    /// Colour and thickness.
+    /// Colour and size.
     private var styleBar: some View {
-        HStack(spacing: 6) {
-            ForEach(Theme.palette.indices, id: \.self) { index in
-                Button {
-                    model.setColor(index)
-                } label: {
-                    Circle()
-                        .fill(Color(nsColor: Theme.palette[index]))
-                        .frame(width: 18, height: 18)
-                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.25), lineWidth: 0.5))
-                        .padding(3)
-                        .overlay {
-                            if model.colorIndex == index {
-                                Circle().strokeBorder(Color.primary, lineWidth: 1.5)
-                            }
-                        }
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            Divider()
-                .frame(height: 18)
-                .padding(.horizontal, 4)
-
-            ForEach(Weight.allCases) { weight in
-                Button {
-                    model.setWeight(weight)
-                } label: {
-                    Circle()
-                        .fill(Color.primary)
-                        .frame(width: dotSize(weight), height: dotSize(weight))
-                        .frame(width: 24, height: 24)
-                        .background {
-                            if model.weight == weight {
-                                Circle().fill(Color.primary.opacity(0.15))
-                            }
-                        }
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .help("Thickness")
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .glassEffect(.regular, in: .capsule)
-    }
-
-    private func dotSize(_ weight: Weight) -> CGFloat {
-        switch weight {
-        case .small: return 4
-        case .medium: return 8
-        case .large: return 12
-        }
+        StyleControls(model: model)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .glassEffect(.regular, in: .capsule)
     }
 
     /// A button label that keeps its icon and drops its text when space is short.
@@ -832,5 +782,68 @@ private struct EditorRootView: View {
             .help("Copy and close (Return)")
         }
         .controlSize(.large)
+    }
+}
+
+/// Colour swatches, the system colour picker (wheel, sliders, eyedropper)
+/// and the size slider.
+private struct StyleControls: View {
+    @ObservedObject var model: EditorModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Theme.palette.indices, id: \.self) { index in
+                Button {
+                    model.setColor(index)
+                } label: {
+                    Circle()
+                        .fill(Color(nsColor: Theme.palette[index]))
+                        .frame(width: 18, height: 18)
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.25), lineWidth: 0.5))
+                        .padding(3)
+                        .overlay {
+                            if model.customColor == nil, model.colorIndex == index {
+                                Circle().strokeBorder(Color.primary, lineWidth: 1.5)
+                            }
+                        }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            ColorPicker("Custom colour", selection: customColor, supportsOpacity: false)
+                .labelsHidden()
+                .help("Any colour: opens the colour wheel")
+
+            Divider()
+                .frame(height: 18)
+                .padding(.horizontal, 4)
+
+            Image(systemName: "lineweight")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+            Slider(value: thickness, in: 1...20)
+                .controlSize(.small)
+                .frame(width: 110)
+                .help("Size of strokes and text")
+            Circle()
+                .fill(Color(nsColor: model.color))
+                .frame(width: model.thickness, height: model.thickness)
+                .frame(width: 22, height: 22)
+        }
+    }
+
+    private var customColor: Binding<Color> {
+        Binding(
+            get: { Color(nsColor: model.color) },
+            set: { model.setCustomColor(NSColor($0)) }
+        )
+    }
+
+    private var thickness: Binding<Double> {
+        Binding(
+            get: { Double(model.thickness) },
+            set: { model.setThickness(CGFloat($0)) }
+        )
     }
 }

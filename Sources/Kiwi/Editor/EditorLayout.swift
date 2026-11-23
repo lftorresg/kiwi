@@ -34,8 +34,8 @@ enum EditorLayout {
     }
 
     static func bottom(forWidth width: CGFloat) -> Bottom {
-        if width >= 990 { return .full }
-        if width >= 810 { return .icons }
+        if width >= 1100 { return .full }
+        if width >= 920 { return .icons }
         return .stacked
     }
 

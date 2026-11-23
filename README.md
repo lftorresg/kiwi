@@ -100,6 +100,8 @@ Recordings are MP4 (MOV when the microphone is on) at up to 60 fps, scaled to 4K
 | O | Ellipse | C | Crop |
 | P | Pen | H | Highlighter |
 
+Pick a colour from the swatches, or open the colour well next to them for the system colour panel: wheel, sliders, palettes and the eyedropper. The slider beside it sets the size of strokes and text. Both also restyle the selected shape.
+
 Hold ⇧ while drawing to snap lines to 45° and shapes to squares and circles. With the Select tool, drag a shape to move it, drag one of its handles to resize it, or drag empty space to move the image when zoomed in. Holding Space turns any tool into a hand for the same purpose.
 
 | Shortcut | Action |

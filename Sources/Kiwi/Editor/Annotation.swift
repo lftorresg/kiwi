@@ -78,30 +78,6 @@ enum Tool: String, CaseIterable, Identifiable {
     }
 }
 
-enum Weight: Int, CaseIterable, Identifiable {
-    case small, medium, large
-
-    var id: Int { rawValue }
-
-    /// Stroke width in points.
-    var stroke: CGFloat {
-        switch self {
-        case .small: return 2.5
-        case .medium: return 4
-        case .large: return 7
-        }
-    }
-
-    /// Text size in points.
-    var font: CGFloat {
-        switch self {
-        case .small: return 15
-        case .medium: return 22
-        case .large: return 32
-        }
-    }
-}
-
 /// One mark on the screenshot. All geometry is in image pixels with a top-left origin.
 struct Annotation: Identifiable {
     enum Kind {
