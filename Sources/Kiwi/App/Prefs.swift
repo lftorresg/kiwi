@@ -25,7 +25,7 @@ final class Prefs: ObservableObject {
         static let shortcuts = "shortcuts"
         static let recordMicrophone = "recordMicrophone"
         static let excludedApps = "excludedApps"
-        static let recordWholeScreen = "recordWholeScreen"
+        static let recordTarget = "recordTarget"
     }
 
     @Published var copyOnCapture: Bool {
@@ -83,9 +83,9 @@ final class Prefs: ObservableObject {
         didSet { UserDefaults.standard.set(recordMicrophone, forKey: Key.recordMicrophone) }
     }
 
-    /// What the recording bar is set to: the whole screen, or an area or window.
-    @Published var recordWholeScreen: Bool {
-        didSet { UserDefaults.standard.set(recordWholeScreen, forKey: Key.recordWholeScreen) }
+    /// What the recording bar was last set to record.
+    @Published var recordTarget: RecordTarget {
+        didSet { UserDefaults.standard.set(recordTarget.rawValue, forKey: Key.recordTarget) }
     }
 
     /// Record in HEVC (sharper and smaller) instead of H.264 (plays in more places).
@@ -187,7 +187,7 @@ final class Prefs: ObservableObject {
         recordHEVC = defaults.bool(forKey: Key.recordHEVC)
         recordMicrophone = defaults.bool(forKey: Key.recordMicrophone)
         excludedApps = defaults.stringArray(forKey: Key.excludedApps) ?? []
-        recordWholeScreen = defaults.bool(forKey: Key.recordWholeScreen)
+        recordTarget = RecordTarget(rawValue: defaults.string(forKey: Key.recordTarget) ?? "") ?? .area
         shortcuts = Prefs.decodeShortcuts(defaults.dictionary(forKey: Key.shortcuts) ?? [:])
     }
 }

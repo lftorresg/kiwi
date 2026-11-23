@@ -53,12 +53,27 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
     private var borderPanel: FloatingPanel?
     private var screen: NSScreen?
 
+    // Follow Me: the recording moves to the screen the user clicks on.
+    private var followMonitor: Any?
+    private var currentDisplayID: CGDirectDisplayID?
+    private var isSwitching = false
+
     /// Starts recording. `rect` is in the display's point space with a top-left
     /// origin; nil records the whole display.
-    func start(displayID: CGDirectDisplayID, rect: CGRect?, screen: NSScreen) {
+    func start(displayID: CGDirectDisplayID, rect: CGRect?, screen: NSScreen, follows: Bool = false) {
         guard !isRecording, !isBusy else { return }
         isBusy = true
         self.screen = screen
+        currentDisplayID = displayID
+        if follows, rect == nil {
+            // A global monitor only reports that a click happened somewhere;
+            // it needs no permission and Kiwi reads nothing else from it.
+            followMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.followPointer()
+                }
+            }
+        }
         didFinishWriting = false
 
         if let rect {
@@ -178,6 +193,12 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
 
     private func reset() {
         let wasRecording = isRecording
+        if let followMonitor {
+            NSEvent.removeMonitor(followMonitor)
+        }
+        followMonitor = nil
+        currentDisplayID = nil
+        isSwitching = false
         RecordingPill.shared.hide()
         borderPanel?.orderOut(nil)
         borderPanel = nil
@@ -188,6 +209,37 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
         isRecording = false
         isBusy = false
         if wasRecording { onStateChange?(false) }
+    }
+
+    // MARK: Follow Me
+
+    /// After a click, points the recording at the screen the pointer is on,
+    /// if that is not the screen being recorded. The video keeps its size;
+    /// a screen with another shape is scaled to fit.
+    private func followPointer() {
+        guard isRecording, !isBusy, !isSwitching, let stream,
+              let target = NSScreen.underMouse, let displayID = target.displayID,
+              displayID != currentDisplayID else { return }
+        isSwitching = true
+        Task { @MainActor in
+            do {
+                let found = try await ScreenGrabber.locateDisplay(displayID)
+                let setup = try ScreenGrabber.regionSetup(
+                    display: found.display, content: found.content, rect: nil, showCursor: true
+                )
+                try await stream.updateContentFilter(setup.filter)
+                if self.isRecording {
+                    self.currentDisplayID = displayID
+                    if let moved = NSScreen.matching(displayID) {
+                        self.screen = moved
+                        RecordingPill.shared.move(to: moved)
+                    }
+                }
+            } catch {
+                NSLog("Kiwi: could not switch the recording to another screen: %@", error.localizedDescription)
+            }
+            self.isSwitching = false
+        }
     }
 
     // MARK: SCRecordingOutputDelegate (called on a background queue)

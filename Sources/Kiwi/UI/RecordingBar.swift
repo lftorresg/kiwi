@@ -8,6 +8,7 @@ final class RecordingBar {
     static let shared = RecordingBar()
 
     private var panel: FloatingPanel?
+    private let state = RecordingBarState()
 
     private init() {}
 
@@ -23,8 +24,13 @@ final class RecordingBar {
 
     func show() {
         guard panel == nil else { return }
+        state.refresh()
+        if state.screens.count < 2, Prefs.shared.recordTarget == .follow {
+            Prefs.shared.recordTarget = .screen
+        }
         let view = RecordingBarView(
             prefs: Prefs.shared,
+            state: state,
             onRecord: { [weak self] in self?.record() },
             onClose: { [weak self] in self?.hide() }
         )
@@ -51,61 +57,108 @@ final class RecordingBar {
     }
 
     private func record() {
-        let wholeScreen = Prefs.shared.recordWholeScreen
+        let target = Prefs.shared.recordTarget
+        let displayID = state.displayID
         hide()
-        CaptureController.shared.beginRecording(wholeScreen: wholeScreen)
+        CaptureController.shared.beginRecording(target, displayID: displayID)
+    }
+}
+
+/// A connected screen, as listed in the bar.
+struct ScreenChoice: Identifiable {
+    let id: CGDirectDisplayID
+    let name: String
+}
+
+/// The screens to choose from, and the one picked in the bar.
+@MainActor
+final class RecordingBarState: ObservableObject {
+    @Published var displayID: CGDirectDisplayID = 0
+    @Published var screens: [ScreenChoice] = []
+
+    /// Reads the connected screens and preselects the one under the pointer.
+    func refresh() {
+        screens = NSScreen.screens.compactMap { screen in
+            screen.displayID.map { ScreenChoice(id: $0, name: screen.localizedName) }
+        }
+        let under = NSScreen.underMouse?.displayID
+        displayID = under ?? screens.first?.id ?? 0
     }
 }
 
 private struct RecordingBarView: View {
     @ObservedObject var prefs: Prefs
+    @ObservedObject var state: RecordingBarState
     let onRecord: () -> Void
     let onClose: () -> Void
 
+    /// Follow Me only makes sense with more than one screen.
+    private var targets: [RecordTarget] {
+        state.screens.count > 1 ? RecordTarget.allCases : RecordTarget.allCases.filter { $0 != .follow }
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-            }
-            .buttonBorderShape(.circle)
-            .keyboardShortcut(.cancelAction)
-            .help("Close (Esc)")
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                .buttonBorderShape(.circle)
+                .keyboardShortcut(.cancelAction)
+                .help("Close (Esc)")
 
-            Picker("What to record", selection: $prefs.recordWholeScreen) {
-                Text("Area or Window").tag(false)
-                Text("Entire Screen").tag(true)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
+                Picker("What to record", selection: $prefs.recordTarget) {
+                    ForEach(targets) { target in
+                        Text(target.title).tag(target)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
 
-            Toggle(isOn: $prefs.recordMicrophone) {
-                Image(systemName: prefs.recordMicrophone ? "mic.fill" : "mic.slash")
-            }
-            .toggleStyle(.button)
-            .help("Record your microphone")
+                if prefs.recordTarget == .screen, state.screens.count > 1 {
+                    Picker("Screen", selection: $state.displayID) {
+                        ForEach(state.screens) { screen in
+                            Text(screen.name).tag(screen.id)
+                        }
+                    }
+                    .labelsHidden()
+                    .fixedSize()
+                    .help("Which screen to record")
+                }
 
-            Toggle(isOn: $prefs.recordSystemAudio) {
-                Image(systemName: prefs.recordSystemAudio ? "speaker.wave.2.fill" : "speaker.slash")
-            }
-            .toggleStyle(.button)
-            .help("Record the Mac's sound")
+                Toggle(isOn: $prefs.recordMicrophone) {
+                    Image(systemName: prefs.recordMicrophone ? "mic.fill" : "mic.slash")
+                }
+                .toggleStyle(.button)
+                .help("Record your microphone")
 
-            Button(action: onRecord) {
-                Label("Record", systemImage: "record.circle")
+                Toggle(isOn: $prefs.recordSystemAudio) {
+                    Image(systemName: prefs.recordSystemAudio ? "speaker.wave.2.fill" : "speaker.slash")
+                }
+                .toggleStyle(.button)
+                .help("Record the Mac's sound")
+
+                Button(action: onRecord) {
+                    Label("Record", systemImage: "record.circle")
+                }
+                .buttonStyle(.glassProminent)
+                .tint(.red)
+                .keyboardShortcut(.defaultAction)
+                .help("Start (Return)")
             }
-            .buttonStyle(.glassProminent)
-            .tint(.red)
-            .keyboardShortcut(.defaultAction)
-            .help(prefs.recordWholeScreen
-                ? "Start recording the screen under the pointer (Return)"
-                : "Choose an area, or press Space for a window, and recording starts (Return)")
+            .buttonStyle(.glass)
+            .controlSize(.large)
+
+            Text(prefs.recordTarget.hint)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
-        .buttonStyle(.glass)
-        .controlSize(.large)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .glassEffect(.regular, in: .capsule)
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 9)
+        .glassEffect(.regular, in: .rect(cornerRadius: 26))
         .padding(14)
         .fixedSize()
     }
@@ -166,6 +219,17 @@ final class RecordingPill: NSObject {
         timer = nil
         panel?.orderOut(nil)
         panel = nil
+    }
+
+    /// Moves the pill to another screen, for a recording that follows the user.
+    func move(to screen: NSScreen) {
+        guard let panel else { return }
+        let area = screen.visibleFrame
+        let size = panel.frame.size
+        panel.setFrame(
+            NSRect(x: area.midX - size.width / 2, y: area.minY + 8, width: size.width, height: size.height),
+            display: true
+        )
     }
 
     @objc private func update() {

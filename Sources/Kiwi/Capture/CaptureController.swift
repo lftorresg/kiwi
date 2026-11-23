@@ -72,14 +72,17 @@ final class CaptureController {
         }
     }
 
-    /// Picks a region (or window) and hands it to `use`.
-    private func selectRegion(_ use: @escaping (CGDirectDisplayID, CGRect, NSScreen) -> Void) {
+    /// Picks a region (or window) and hands it to `use`. The picker opens in
+    /// `mode`; Space switches between dragging an area and clicking a window.
+    private func selectRegion(
+        mode: CaptureMode = .area, _ use: @escaping (CGDirectDisplayID, CGRect, NSScreen) -> Void
+    ) {
         if selection.isActive {
             selection.finish(.cancelled)
             return
         }
         guard ensurePermission() else { return }
-        selection.begin(mode: .area) { result in
+        selection.begin(mode: mode) { result in
             switch result {
             case .cancelled:
                 break
@@ -149,18 +152,21 @@ final class CaptureController {
         RecordingBar.shared.toggle()
     }
 
-    /// Starts a recording as the recording bar was set up.
-    func beginRecording(wholeScreen: Bool) {
+    /// Starts a recording as the recording bar was set up. `displayID` is the
+    /// screen chosen in the bar; without one, the screen under the pointer is used.
+    func beginRecording(_ target: RecordTarget, displayID chosen: CGDirectDisplayID? = nil) {
         let recorder = RecordingController.shared
         guard !recorder.isRecording, !ScrollCaptureController.shared.isActive else { return }
-        if wholeScreen {
-            guard ensurePermission() else { return }
-            guard let screen = NSScreen.underMouse, let displayID = screen.displayID else { return }
-            recorder.start(displayID: displayID, rect: nil, screen: screen)
-        } else {
-            selectRegion { displayID, rect, screen in
+        switch target {
+        case .area, .window:
+            selectRegion(mode: target == .window ? .window : .area) { displayID, rect, screen in
                 recorder.start(displayID: displayID, rect: rect, screen: screen)
             }
+        case .screen, .follow:
+            guard ensurePermission() else { return }
+            guard let screen = NSScreen.matching(chosen) ?? NSScreen.underMouse,
+                  let displayID = screen.displayID else { return }
+            recorder.start(displayID: displayID, rect: nil, screen: screen, follows: target == .follow)
         }
     }
 

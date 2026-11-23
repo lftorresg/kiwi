@@ -85,7 +85,12 @@ Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches ea
 
 ## Recording
 
-⇧⌘5 opens a small bar at the bottom of the screen. Choose **Area or Window** or **Entire Screen**, switch the microphone and the Mac's sound on or off, and press **Record** (or Return; Esc closes the bar). For an area, drag it out, or press Space to pick a window, and recording starts.
+⇧⌘5 opens a small bar at the bottom of the screen. Choose what to record, switch the microphone and the Mac's sound on or off, and press **Record** (or Return; Esc closes the bar):
+
+- **Area**: drag over the part of the screen you want.
+- **Window**: click the window you want. Kiwi records the place the window is in, so keep it where it is.
+- **Screen**: the whole screen. With more than one screen connected, a menu next to it lets you pick which.
+- **Follow Me** (shown with more than one screen): records the screen you are using and switches to another one when you click on it. The video keeps the size of the screen it started on; a screen with a different shape is scaled to fit.
 
 While recording, a Stop pill with the elapsed time floats at the bottom of the screen. Click it, press ⇧⌘5 again, or click the timer in the menu bar to stop. You can drag the pill out of the way; like every Kiwi window, it never appears in the video.
 

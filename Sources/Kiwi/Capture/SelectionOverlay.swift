@@ -14,6 +14,35 @@ enum CaptureMode {
     case window
 }
 
+/// What the recording bar is set to record.
+enum RecordTarget: String, CaseIterable, Identifiable {
+    case area
+    case window
+    case screen
+    /// Whichever screen is in use: the recording switches when you click another one.
+    case follow
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .area: return "Area"
+        case .window: return "Window"
+        case .screen: return "Screen"
+        case .follow: return "Follow Me"
+        }
+    }
+
+    var hint: String {
+        switch self {
+        case .area: return "Press Record, then drag over the part of the screen you want."
+        case .window: return "Press Record, then click the window you want."
+        case .screen: return "Records the whole screen."
+        case .follow: return "Records the screen you are using and switches when you click on another one."
+        }
+    }
+}
+
 /// Shows one transparent overlay per display and reports the chosen area or window.
 /// The overlay is a non-activating panel, so the app in front stays in front.
 @MainActor
