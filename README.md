@@ -51,6 +51,7 @@ Kiwi opens a short setup guide:
 | ⇧⌘4 | Capture an area. Space switches to window capture. Esc or right-click cancels. |
 | ⇧⌘3 | Capture the screen under the pointer |
 | ⇧⌘5 | Open the recording bar. While recording, press again to stop. |
+| ⌥⇧⌘5 | Record straight away with the bar's last settings, skipping the bar. Press again to stop. |
 | ⇧⌘6 | Scrolling capture. Pick the area, scroll, then press Done or ⇧⌘6 again. |
 | ⇧⌘2 | Open the last capture in the editor |
 

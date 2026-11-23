@@ -160,6 +160,18 @@ final class CaptureController {
         RecordingBar.shared.toggle()
     }
 
+    /// Starts recording straight away with whatever the bar was last set to,
+    /// or stops the recording in progress.
+    func recordNow() {
+        let recorder = RecordingController.shared
+        if recorder.isRecording {
+            recorder.stop()
+            return
+        }
+        RecordingBar.shared.hide()
+        beginRecording(Prefs.shared.recordTarget)
+    }
+
     /// Starts a recording as the recording bar was set up. `displayID` is the
     /// screen chosen in the bar; without one, the screen under the pointer is used.
     func beginRecording(_ target: RecordTarget, displayID chosen: CGDirectDisplayID? = nil) {

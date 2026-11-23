@@ -6,6 +6,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     case captureArea
     case captureScreen
     case record
+    case recordNow
     case captureScrolling
     case editLast
 
@@ -15,7 +16,8 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         switch self {
         case .captureArea: return "Capture area or window"
         case .captureScreen: return "Capture full screen"
-        case .record: return "Record (press again to stop)"
+        case .record: return "Open the recording bar (press again to stop)"
+        case .recordNow: return "Record straight away with the last settings"
         case .captureScrolling: return "Scrolling capture"
         case .editLast: return "Edit last capture"
         }
@@ -25,7 +27,8 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         switch self {
         case .captureArea: return "Capture area"
         case .captureScreen: return "Capture screen"
-        case .record: return "Record area"
+        case .record: return "Recording bar"
+        case .recordNow: return "Record now"
         case .captureScrolling: return "Scrolling capture"
         case .editLast: return "Edit last capture"
         }
@@ -37,6 +40,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         case .captureArea: return Shortcut(keyCode: kVK_ANSI_4, modifiers: modifiers, key: "4")
         case .captureScreen: return Shortcut(keyCode: kVK_ANSI_3, modifiers: modifiers, key: "3")
         case .record: return Shortcut(keyCode: kVK_ANSI_5, modifiers: modifiers, key: "5")
+        case .recordNow: return Shortcut(keyCode: kVK_ANSI_5, modifiers: modifiers | optionKey, key: "5")
         case .captureScrolling: return Shortcut(keyCode: kVK_ANSI_6, modifiers: modifiers, key: "6")
         case .editLast: return Shortcut(keyCode: kVK_ANSI_2, modifiers: modifiers, key: "2")
         }
@@ -260,6 +264,7 @@ final class ShortcutManager {
         case .captureArea: capture.captureArea()
         case .captureScreen: capture.captureScreen()
         case .record: capture.toggleRecording()
+        case .recordNow: capture.recordNow()
         case .captureScrolling: capture.captureScrolling()
         case .editLast: capture.editLast()
         }

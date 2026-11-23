@@ -85,7 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(delayedCaptureItem())
         menu.addItem(.separator())
         menu.addItem(menuItem("Record…", #selector(recordArea), keys: .record, symbol: "record.circle"))
-        menu.addItem(menuItem("Record Screen", #selector(recordScreen), symbol: "menubar.dock.rectangle"))
+        menu.addItem(menuItem("Record Now", #selector(recordNow), keys: .recordNow, symbol: "record.circle.fill"))
         menu.addItem(menuItem("Make GIF of Last Recording", #selector(gifLast), symbol: "photo.stack"))
         menu.addItem(.separator())
         menu.addItem(menuItem("Edit Last Capture", #selector(editLast), keys: .editLast, symbol: "pencil.tip.crop.circle"))
@@ -269,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func captureScreen() { CaptureController.shared.captureScreen() }
     @objc private func captureScrolling() { CaptureController.shared.captureScrolling() }
     @objc private func recordArea() { CaptureController.shared.toggleRecording() }
-    @objc private func recordScreen() { CaptureController.shared.recordScreen() }
+    @objc private func recordNow() { CaptureController.shared.recordNow() }
     @objc private func stopRecording() { RecordingController.shared.stop() }
     @objc private func gifLast() { CaptureController.shared.makeGIFOfLastRecording() }
     @objc private func editLast() { CaptureController.shared.editLast() }
