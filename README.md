@@ -169,12 +169,12 @@ Results are written next to the originals with Finder-style names (`photo 2.jpg`
 **PDF to DOCX** rebuilds the document instead of pasting each page in as a picture, so it stays editable in Word, Pages and Google Docs:
 
 - lines are joined back into paragraphs that reflow, with words that were split by a hyphen at a line end put back together;
-- larger or bold titles become real heading styles (so they show up in the outline), bullets become real list items, and text whose columns line up becomes a table;
-- bold, italic, colour, text size and links are kept;
+- titles set in larger type become real heading styles (so they show up in the outline), bullets become real list items, and text whose columns clearly line up becomes a table;
+- bold, italic, colour, text size, alignment and links are kept, and lines set close together (a title block, an address) stay close together;
 - photos, charts and diagrams are kept as pictures where they were, and a page with no readable text (a scan) is kept as one picture;
 - headers, footers and page numbers that repeat on every page are left out.
 
-It works from where each character sits on the page, by rules of thumb. Plain reports, contracts and articles come through well. Expect to tidy up multi-column pages, tables with merged or wrapped cells, numbered lists (the numbers are kept as typed text) and forms; scanned pages are not turned into text.
+It works from where each character sits on the page, by rules of thumb. Plain reports, contracts and articles come through well. Expect to tidy up multi-column pages, tables with merged or wrapped cells, numbered lists (the numbers are kept as typed text) and forms. Underlines are not carried over, and scanned pages are not turned into text.
 
 Everything is done with the frameworks that ship with macOS, so the formats are the ones macOS can write: there is no MP3, WebM or MKV output. Documents keep text, fonts, colours, lists and simple tables; complex layouts may shift. Kiwi makes ZIP archives but does not unpack them.
 

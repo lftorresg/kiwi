@@ -99,12 +99,20 @@ enum PDFEngine {
     /// headings, bullet lists, tables, pictures and links. See `PDFToDocx`.
     static func docx(of url: URL, progress: ProgressHandler) throws -> URL {
         let document = try open(url)
-        let rebuilt = try PDFToDocx.convert(document, progress: progress)
-        guard !rebuilt.blocks.isEmpty else {
+        // `defaults write io.github.lftorresg.kiwi debugLayout -bool YES` also
+        // writes what was read from the pages, with the text masked, next to
+        // the result. It is for tuning the conversion and is off otherwise.
+        let wantsLayout = UserDefaults.standard.bool(forKey: "debugLayout")
+        let rebuilt = try PDFToDocx.convert(document, wantsLayout: wantsLayout, progress: progress)
+        guard !rebuilt.document.blocks.isEmpty else {
             throw KiwiError("\(url.lastPathComponent) has nothing Kiwi can convert.")
         }
         let output = ImageEngine.outputURL(for: url, fileExtension: "docx")
-        try DocxWriter.data(for: rebuilt).write(to: output, options: .atomic)
+        try DocxWriter.data(for: rebuilt.document).write(to: output, options: .atomic)
+        if wantsLayout {
+            let report = output.deletingPathExtension().appendingPathExtension("layout.txt")
+            try? rebuilt.layout.write(to: report, atomically: true, encoding: .utf8)
+        }
         return output
     }
 

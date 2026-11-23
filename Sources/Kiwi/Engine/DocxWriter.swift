@@ -35,6 +35,9 @@ struct DocxParagraph {
     var runs: [DocxRun]
     var kind: Kind = .body
     var alignment: Alignment = .left
+    /// No space after it: the next paragraph follows directly, as lines of a
+    /// title block or an address do.
+    var tight = false
 }
 
 enum DocxBlock {
@@ -91,6 +94,9 @@ enum DocxWriter {
             case .bullet(let level):
                 properties += "<w:pStyle w:val=\"ListParagraph\"/>"
                 properties += "<w:numPr><w:ilvl w:val=\"\(min(max(level, 0), 2))\"/><w:numId w:val=\"1\"/></w:numPr>"
+            }
+            if paragraph.tight {
+                properties += "<w:spacing w:after=\"0\"/>"
             }
             switch paragraph.alignment {
             case .left: break

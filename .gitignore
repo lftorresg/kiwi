@@ -2,6 +2,7 @@
 build/
 dist/
 profile-*.txt
+*.layout.txt
 .swiftpm/
 *.xcodeproj
 .DS_Store

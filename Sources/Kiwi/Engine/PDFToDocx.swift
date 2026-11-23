@@ -16,10 +16,17 @@ import PDFKit
 enum PDFToDocx {
     // MARK: What is read from a page
 
-    /// One character, with where it is and how it looks. Spaces have no box.
+    /// One character and how it looks. `box` is the box of the word it
+    /// belongs to when the words of its line were measured, otherwise the box
+    /// of the whole line. Spaces have none.
+    ///
+    /// The text itself always comes from the page's string. Positions are
+    /// only ever used to decide how to arrange it, never whether to keep it:
+    /// PDFKit does not report a usable position for every character.
     private struct Glyph {
         var text: String
         var box: CGRect
+        var isSpace = false
         var bold: Bool
         var italic: Bool
         var size: CGFloat
@@ -27,7 +34,14 @@ enum PDFToDocx {
         var font: String?
         var link: String?
 
-        var isSpace: Bool { box.isNull }
+        /// A space that looks like this glyph.
+        var asSpace: Glyph {
+            var space = self
+            space.text = " "
+            space.box = .null
+            space.isSpace = true
+            return space
+        }
     }
 
     /// One line of text. Boxes are in points from the top-left of the page.
@@ -36,6 +50,8 @@ enum PDFToDocx {
         var box: CGRect
         var size: CGFloat
         var page: Int
+        /// True when each word has its own box, so gaps inside the line are known.
+        var measured = false
 
         var text: String { glyphs.map(\.text).joined() }
     }
@@ -64,7 +80,13 @@ enum PDFToDocx {
 
     // MARK: Entry point
 
-    static func convert(_ document: PDFDocument, progress: ProgressHandler) throws -> DocxDocument {
+    /// `wantsLayout` also returns a description of what was read from each
+    /// page, for working out why a conversion went wrong. It holds positions
+    /// and sizes only: every letter is replaced by "x" and every digit by "9".
+    static func convert(
+        _ document: PDFDocument, wantsLayout: Bool = false, progress: ProgressHandler
+    ) throws -> (document: DocxDocument, layout: String) {
+        var layout = ""
         let count = document.pageCount
         var pages: [[Line]] = []
         var figures: [[Figure]] = []
@@ -84,8 +106,31 @@ enum PDFToDocx {
 
             // A rotated page has its text sideways; keep it whole as a picture.
             let rotated = page.rotation % 360 != 0
-            var lines = rotated ? [] : readLines(of: page, index: index, box: box)
-            var found = try readFigures(of: page, box: box, lines: lines, rotated: rotated)
+            var lines: [Line] = []
+            var placed = true
+            if !rotated {
+                let read = readLines(of: page, index: index, box: box)
+                lines = read.lines
+                placed = read.placed
+            }
+            // Without knowing where the text is, text cannot be told apart
+            // from pictures, so such a page keeps its text and nothing else.
+            var found: [Figure] = []
+            if placed {
+                found = try readFigures(of: page, box: box, lines: lines, rotated: rotated)
+            }
+            if wantsLayout {
+                layout += "page \(index + 1)  \(Int(box.width))x\(Int(box.height))  lines=\(lines.count)  placed=\(placed)  rotated=\(rotated)\n"
+                for figure in found {
+                    layout += "  figure  \(describe(figure.box))  \(figure.isJPEG ? "jpeg" : "png") \(figure.data.count) bytes\n"
+                }
+                for line in lines {
+                    let bold = line.glyphs.filter { !$0.isSpace && $0.bold }.count
+                    let inked = line.glyphs.filter { !$0.isSpace }.count
+                    layout += "  line  \(describe(line.box))  size=\(line.size)  measured=\(line.measured)  bold=\(bold)/\(inked)"
+                    layout += "  segments=\(segments(of: line).count)  | \(masked(line.text))\n"
+                }
+            }
             for figure in found {
                 // Text that sits inside a picture is already part of the picture.
                 lines.removeAll { figure.box.contains(CGPoint(x: $0.box.midX, y: $0.box.midY)) }
@@ -137,17 +182,44 @@ enum PDFToDocx {
         if let smallest = lefts.min() {
             result.margin = min(max(smallest, 36), 90)
         }
+        if wantsLayout {
+            layout += "\nbody size \(bodySize)  headings \(builder.headingSizes)  blocks \(builder.blocks.count)\n"
+            for block in builder.blocks {
+                switch block {
+                case .paragraph(let paragraph):
+                    let text = paragraph.runs.map(\.text).joined()
+                    layout += "  \(paragraph.kind) \(paragraph.alignment) tight=\(paragraph.tight) | \(masked(text))\n"
+                case .table(let columns, let rows):
+                    layout += "  table \(rows.count)x\(columns.count)\n"
+                case .image(_, _, let size):
+                    layout += "  image \(Int(size.width))x\(Int(size.height))\n"
+                }
+            }
+        }
         progress(1)
-        return result
+        return (result, layout)
+    }
+
+    private static func describe(_ box: CGRect) -> String {
+        "x=\(Int(box.minX))..\(Int(box.maxX)) y=\(Int(box.minY))..\(Int(box.maxY))"
+    }
+
+    /// The shape of some text without its content.
+    private static func masked(_ text: String) -> String {
+        String(text.map { character -> Character in
+            if character.isNumber { return "9" }
+            if character.isLetter { return character.isUppercase ? "X" : "x" }
+            return character
+        })
     }
 
     // MARK: Reading text
 
-    private static func readLines(of page: PDFPage, index: Int, box: CGRect) -> [Line] {
-        guard let string = page.string, !string.isEmpty else { return [] }
+    /// The page's lines, and whether every one of them could be placed.
+    private static func readLines(of page: PDFPage, index: Int, box: CGRect) -> (lines: [Line], placed: Bool) {
+        guard let string = page.string, !string.isEmpty else { return ([], true) }
         let text = string as NSString
         let length = text.length
-        guard length == page.numberOfCharacters else { return [] }
 
         // Fonts and colours, when they line up with the text.
         var styles: [(range: NSRange, font: NSFont?, color: NSColor?)] = []
@@ -163,80 +235,168 @@ enum PDFToDocx {
             return (annotation.bounds, url.absoluteString)
         }
 
-        var lines: [Line] = []
-        var current: [Glyph] = []
-
-        func endLine() {
-            defer { current.removeAll() }
-            let inked = current.filter { !$0.isSpace }
-            guard !inked.isEmpty else { return }
-            var union = CGRect.null
-            var sizes: [CGFloat: Int] = [:]
-            for glyph in inked {
-                union = union.union(glyph.box)
-                sizes[glyph.size, default: 0] += 1
-            }
-            let size = sizes.max { $0.value < $1.value }?.key ?? 11
-            // Trim spaces at both ends.
-            var glyphs = current
-            while let first = glyphs.first, first.isSpace { glyphs.removeFirst() }
-            while let last = glyphs.last, last.isSpace { glyphs.removeLast() }
-            lines.append(Line(glyphs: glyphs, box: union, size: size, page: index))
+        /// A rectangle in page space that can be believed, or nil.
+        func usable(_ rect: CGRect?) -> CGRect? {
+            guard let rect, !rect.isNull, !rect.isInfinite, rect.width > 0.5, rect.height > 0.5,
+                  rect.width <= box.width * 1.1, rect.height <= 400, rect.intersects(box) else { return nil }
+            return rect
+        }
+        /// From the page's bottom-left origin to a top-left one.
+        func flipped(_ rect: CGRect) -> CGRect {
+            CGRect(x: rect.minX - box.minX, y: box.maxY - rect.maxY, width: rect.width, height: rect.height)
         }
 
+        var lines: [Line] = []
+        var placed = true
         var position = 0
         while position < length {
-            let range = text.rangeOfComposedCharacterSequence(at: position)
-            position = range.location + range.length
-            let piece = text.substring(with: range)
-            if piece == "\n" || piece == "\r" || piece == "\r\n" || piece == "\u{2028}" || piece == "\u{2029}" {
-                endLine()
-                continue
+            // One line: up to the next line break.
+            var end = position
+            while end < length {
+                let unit = text.character(at: end)
+                if unit == 0x0A || unit == 0x0D || unit == 0x2028 || unit == 0x2029 { break }
+                end += 1
             }
+            let lineRange = NSRange(location: position, length: end - position)
+            position = end + 1
+            guard lineRange.length > 0 else { continue }
 
-            while styleIndex < styles.count, NSMaxRange(styles[styleIndex].range) <= range.location {
-                styleIndex += 1
-            }
-            let style = styleIndex < styles.count && NSLocationInRange(range.location, styles[styleIndex].range)
-                ? styles[styleIndex] : nil
+            var glyphs: [Glyph] = []
+            var words: [NSRange] = []
+            var wordOfGlyph: [Int] = []
+            var wordStart: Int?
+            var cursor = lineRange.location
+            while cursor < NSMaxRange(lineRange) {
+                let range = text.rangeOfComposedCharacterSequence(at: cursor)
+                let piece = text.substring(with: range)
+                let here = cursor
+                cursor = NSMaxRange(range)
 
-            let raw = page.characterBounds(at: range.location)
-            let blank = piece.trimmingCharacters(in: .whitespaces).isEmpty
-            if blank || raw.width <= 0 || raw.height <= 0 {
-                if blank, let last = current.last, !last.isSpace {
-                    var space = last
-                    space.text = " "
-                    space.box = .null
-                    current.append(space)
+                if piece.trimmingCharacters(in: .whitespaces).isEmpty {
+                    if let start = wordStart {
+                        words.append(NSRange(location: start, length: here - start))
+                        wordStart = nil
+                    }
+                    if let last = glyphs.last, !last.isSpace {
+                        glyphs.append(last.asSpace)
+                        wordOfGlyph.append(-1)
+                    }
+                    continue
                 }
-                continue
+                if wordStart == nil { wordStart = here }
+
+                while styleIndex < styles.count, NSMaxRange(styles[styleIndex].range) <= here {
+                    styleIndex += 1
+                }
+                var font: NSFont?
+                var color: NSColor?
+                if styleIndex < styles.count, NSLocationInRange(here, styles[styleIndex].range) {
+                    font = styles[styleIndex].font
+                    color = styles[styleIndex].color
+                }
+                let name = (font?.fontName ?? "").lowercased()
+                let traits = font?.fontDescriptor.symbolicTraits ?? []
+                glyphs.append(Glyph(
+                    text: piece,
+                    box: .null,
+                    bold: traits.contains(.bold) || ["bold", "black", "heavy", "semibold", "demi"].contains { name.contains($0) },
+                    italic: traits.contains(.italic) || name.contains("italic") || name.contains("oblique"),
+                    size: ((font?.pointSize ?? 0) * 2).rounded() / 2,
+                    color: hex(color),
+                    font: family(font),
+                    link: nil
+                ))
+                wordOfGlyph.append(words.count)
+            }
+            if let start = wordStart {
+                words.append(NSRange(location: start, length: NSMaxRange(lineRange) - start))
+            }
+            while let last = glyphs.last, last.isSpace {
+                glyphs.removeLast()
+                wordOfGlyph.removeLast()
+            }
+            let inked = glyphs.filter { !$0.isSpace }.count
+            guard inked > 0 else { continue }
+
+            // Where the line is. Ask for the whole line first; fall back to
+            // whichever of its characters have a believable position.
+            var raw = usable(page.selection(for: lineRange)?.bounds(for: page))
+            if raw == nil {
+                var union = CGRect.null
+                for offset in 0..<lineRange.length {
+                    if let one = usable(page.characterBounds(at: lineRange.location + offset)) {
+                        union = union.union(one)
+                    }
+                }
+                raw = usable(union)
+            }
+            var lineBox: CGRect
+            if let raw {
+                lineBox = flipped(raw)
+            } else if let previous = lines.last {
+                // Unknown: assume it follows the line before it.
+                placed = false
+                lineBox = previous.box.offsetBy(dx: 0, dy: previous.box.height * 1.2)
+            } else {
+                placed = false
+                lineBox = CGRect(x: 72, y: 72, width: max(72, box.width - 144), height: 12)
             }
 
-            // From the page's bottom-left origin to a top-left one.
-            let glyphBox = CGRect(
-                x: raw.minX - box.minX, y: box.maxY - raw.maxY, width: raw.width, height: raw.height
-            )
-            let font = style?.font
-            let name = (font?.fontName ?? "").lowercased()
-            let traits = font?.fontDescriptor.symbolicTraits ?? []
-            var size = font?.pointSize ?? 0
-            if size < 4 { size = raw.height / 1.2 }
-            size = (size * 2).rounded() / 2
+            // The size most of the line is set in.
+            var sizes: [CGFloat: Int] = [:]
+            for glyph in glyphs where !glyph.isSpace && glyph.size >= 4 {
+                sizes[glyph.size, default: 0] += 1
+            }
+            let size = sizes.max { $0.value < $1.value }?.key ?? ((lineBox.height / 1.2) * 2).rounded() / 2
+            for slot in glyphs.indices where glyphs[slot].size < 4 {
+                glyphs[slot].size = size
+            }
 
-            let centre = CGPoint(x: raw.midX, y: raw.midY)
-            current.append(Glyph(
-                text: piece,
-                box: glyphBox,
-                bold: traits.contains(.bold) || ["bold", "black", "heavy", "semibold", "demi"].contains { name.contains($0) },
-                italic: traits.contains(.italic) || name.contains("italic") || name.contains("oblique"),
-                size: size,
-                color: hex(style?.color),
-                font: family(font),
-                link: links.first { $0.box.contains(centre) }?.url
-            ))
+            // Measure the words only where it can matter: a line with far
+            // more width than its text needs (it may be a table row), or one
+            // that a link touches.
+            var measured = false
+            let sparse = inked >= 2 && words.count >= 2 && lineBox.width > CGFloat(inked) * size * 0.68
+            let touchesLink = raw.map { rect in links.contains { $0.box.intersects(rect) } } ?? false
+            if raw != nil, sparse || touchesLink {
+                var boxes: [CGRect] = []
+                var rawBoxes: [CGRect] = []
+                var believable = true
+                var lastEdge = -CGFloat.greatestFiniteMagnitude
+                let limit = lineBox.insetBy(dx: -4, dy: -4)
+                for word in words {
+                    guard let one = usable(page.selection(for: word)?.bounds(for: page)) else {
+                        believable = false
+                        break
+                    }
+                    let wordBox = flipped(one)
+                    // Words must sit inside the line and run left to right.
+                    guard limit.contains(wordBox), wordBox.minX >= lastEdge - size else {
+                        believable = false
+                        break
+                    }
+                    lastEdge = wordBox.maxX
+                    boxes.append(wordBox)
+                    rawBoxes.append(one)
+                }
+                if believable, boxes.count == words.count {
+                    measured = true
+                    for slot in glyphs.indices where wordOfGlyph[slot] >= 0 {
+                        let word = wordOfGlyph[slot]
+                        glyphs[slot].box = boxes[word]
+                        let centre = CGPoint(x: rawBoxes[word].midX, y: rawBoxes[word].midY)
+                        glyphs[slot].link = links.first { $0.box.contains(centre) }?.url
+                    }
+                }
+            }
+            if !measured {
+                for slot in glyphs.indices where !glyphs[slot].isSpace {
+                    glyphs[slot].box = lineBox
+                }
+            }
+            lines.append(Line(glyphs: glyphs, box: lineBox, size: size, page: index, measured: measured))
         }
-        endLine()
-        return lines
+        return (lines, placed)
     }
 
     /// "RRGGBB" for a colour that is clearly not black.
@@ -452,7 +612,7 @@ enum PDFToDocx {
         var elements: [Element] = []
         var index = 0
         while index < lines.count {
-            let seed = segments(of: lines[index])
+            let seed = lines[index].measured ? segments(of: lines[index]) : []
             guard seed.count >= 2 else {
                 elements.append(.line(lines[index]))
                 index += 1
@@ -504,8 +664,10 @@ enum PDFToDocx {
             func filled(_ line: Line) -> Set<Int> {
                 Set(line.glyphs.filter { !$0.isSpace }.map { column(of: $0.box.midX) })
             }
-            let proper = rows.filter { filled(lines[$0]).count >= 2 }.count
-            let isTable = (rows.count >= 3 && proper >= 2) || (rows.count >= 2 && proper >= 2 && cuts.count >= 2)
+            // Be sure before calling it a table: three rows with text in
+            // more than one column, or two such rows of three or more columns.
+            let proper = rows.filter { lines[$0].measured && filled(lines[$0]).count >= 2 }.count
+            let isTable = proper >= 3 || (proper >= 2 && cuts.count >= 2)
             guard isTable else {
                 elements.append(.line(lines[index]))
                 index += 1
@@ -527,10 +689,7 @@ enum PDFToDocx {
                 let wraps = !cells.isEmpty && filled(line).count == 1 && line.box.minY - lastBottom < line.size * 0.6
                 if wraps {
                     for (position, glyphs) in split.enumerated() where glyphs.contains(where: { !$0.isSpace }) {
-                        var space = glyphs[0]
-                        space.text = " "
-                        space.box = .null
-                        cells[cells.count - 1][position].append(space)
+                        cells[cells.count - 1][position].append(glyphs[0].asSpace)
                         cells[cells.count - 1][position].append(contentsOf: glyphs)
                     }
                 } else {
@@ -619,7 +778,9 @@ enum PDFToDocx {
                     blocks.append(block)
                 case .line(let line):
                     if let previous = pending.last, startsNewParagraph(previous, line, left: left, right: right) {
-                        flush()
+                        // Lines set close together stay close together.
+                        let gap = line.box.minY - previous.box.maxY
+                        flush(tight: line.page == previous.page && gap <= previous.size * 0.45)
                     }
                     if pending.isEmpty {
                         pendingLeft = left
@@ -654,7 +815,9 @@ enum PDFToDocx {
             if gap > max(line.size, previous.size) * 0.75 { return true }
             if gap < -previous.box.height * 0.5 { return true }
             if isCentred(previous, left: left, right: right), isCentred(line, left: left, right: right) {
-                return false
+                // Centred lines are separate (a title block), unless the one
+                // above is wide enough to have wrapped.
+                return previous.box.width < (right - left) * 0.85
             }
             if !isFull(previous, right: right, left: left) { return true }
             // A first-line indent marks a new paragraph.
@@ -667,7 +830,7 @@ enum PDFToDocx {
             return false
         }
 
-        mutating func flush() {
+        mutating func flush(tight: Bool = false) {
             guard !pending.isEmpty else { return }
             let lines = pending
             let left = pendingLeft
@@ -685,10 +848,7 @@ enum PDFToDocx {
                         while let tail = glyphs.last, tail.isSpace { glyphs.removeLast() }
                         glyphs.removeLast()
                     } else {
-                        var space = last
-                        space.text = " "
-                        space.box = .null
-                        glyphs.append(space)
+                        glyphs.append(last.asSpace)
                     }
                 }
                 incoming.removeAll { $0.text == "\u{00AD}" }
@@ -701,7 +861,6 @@ enum PDFToDocx {
             var sizes: [CGFloat: Int] = [:]
             for glyph in inked { sizes[glyph.size, default: 0] += 1 }
             let size = sizes.max { $0.value < $1.value }?.key ?? bodySize
-            let allBold = inked.allSatisfy(\.bold)
 
             var paragraph = DocxParagraph(runs: [])
             var heading: (size: CGFloat, boldOnly: Bool)?
@@ -718,14 +877,14 @@ enum PDFToDocx {
                 paragraph.runs = PDFToDocx.runs(from: rest, baseSize: bodySize, plain: false)
                 bulletIndent = lines[0].box.minX
             } else {
+                // Only text that is larger than the body is a heading. Bold
+                // lines of the same size stay as they are, bold and in place:
+                // turning them into headings changes how the page looks.
                 let bigger = size >= bodySize * 1.15 && text.count <= 200 && lines.count <= 3
-                let last = text.last ?? " "
-                let boldTitle = allBold && lines.count == 1 && text.count <= 80 && size >= bodySize - 0.3
-                    && !".,;".contains(last) && text.contains(where: \.isLetter)
-                if bigger || boldTitle {
+                if bigger {
                     paragraph.kind = .heading(1)
                     paragraph.runs = PDFToDocx.runs(from: glyphs, baseSize: size, plain: true)
-                    heading = (size, !bigger)
+                    heading = (size, false)
                 } else {
                     paragraph.runs = PDFToDocx.runs(from: glyphs, baseSize: bodySize, plain: false)
                 }
@@ -740,6 +899,7 @@ enum PDFToDocx {
             }) {
                 paragraph.alignment = .justified
             }
+            paragraph.tight = tight
             guard !paragraph.runs.isEmpty else { return }
             if let heading { headings.append((blocks.count, heading.size, heading.boldOnly)) }
             if let bulletIndent { bulletIndents.append((blocks.count, bulletIndent)) }
