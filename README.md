@@ -95,7 +95,7 @@ Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches ea
 
 The menu in the bar sets the **resolution** (Native, 4K, 1440p, 1080p or 720p) and the **frame rate** (60 or 30 fps); the same choices are in Settings → Recording. Lower values are lighter on the Mac while recording and make smaller files.
 
-While recording, a Stop pill with the elapsed time floats at the bottom of the screen. Click it, press ⇧⌘5 again, or click the timer in the menu bar to stop. You can drag the pill out of the way; like every Kiwi window, it never appears in the video.
+While recording, a Stop pill with the elapsed time floats at the bottom of the screen. Click it, press ⇧⌘5 again, or click the red Stop button that replaces Kiwi's icon in the menu bar. You can drag the pill out of the way; like every Kiwi window, it never appears in the video.
 
 Recordings are MP4 (MOV when the microphone is on) at 60 or 30 fps, at the resolution you choose and 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio and the microphone are both optional and off by default. The first time you turn the microphone on, macOS asks for permission. The red outline and Kiwi's own windows never appear in the video.
 

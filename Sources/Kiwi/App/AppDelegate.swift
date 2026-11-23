@@ -5,7 +5,6 @@ import Carbon.HIToolbox
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
-    private var recordingTimer: Timer?
     private var refusedShortcuts: [ShortcutAction] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -180,19 +179,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// While recording, the menu bar item turns into a stop button with a timer.
     private func recordingStateChanged(_ recording: Bool) {
-        recordingTimer?.invalidate()
-        recordingTimer = nil
         guard let item = statusItem, let button = item.button else { return }
 
         if recording {
+            // A plain red Stop button, the same size as the usual icon. The
+            // elapsed time is in the floating Stop pill instead: a title that
+            // changes every second makes macOS lay the menu bar out again and
+            // redraw this item for every screen, which measured at about a
+            // tenth of a processor core for the whole recording.
             item.menu = nil
-            item.length = NSStatusItem.variableLength
             let configuration = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
             let image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: "Stop recording")?
                 .withSymbolConfiguration(configuration)
             image?.isTemplate = false
             button.image = image
-            button.imagePosition = .imageLeading
+            button.title = image == nil ? "■" : ""
+            button.imagePosition = .imageOnly
             if let keys = Prefs.shared.shortcut(for: .record) {
                 button.toolTip = "Stop recording (\(keys.display))"
             } else {
@@ -200,24 +202,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             button.target = self
             button.action = #selector(stopRecording)
-            updateRecordingTitle()
-            let timer = Timer(
-                timeInterval: 1, target: self, selector: #selector(updateRecordingTitle), userInfo: nil, repeats: true
-            )
-            RunLoop.main.add(timer, forMode: .common)
-            recordingTimer = timer
         } else {
             applyIdleAppearance()
             item.menu = statusMenu
         }
-    }
-
-    @objc private func updateRecordingTitle() {
-        guard let button = statusItem?.button else { return }
-        let elapsed = Int(Date().timeIntervalSince(RecordingController.shared.startedAt ?? Date()))
-        let minutes = elapsed / 60
-        let seconds = elapsed % 60
-        button.title = " \(minutes):\(seconds < 10 ? "0" : "")\(seconds)"
     }
 
     /// `keys` names the global shortcut to show beside the item, if it has one.

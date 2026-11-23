@@ -57,6 +57,9 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
     private var followMonitor: Any?
     private var currentDisplayID: CGDirectDisplayID?
     private var isSwitching = false
+    /// A capture filter for every screen, made when the recording starts, so
+    /// that moving to another screen needs no look-up.
+    private var followFilters: [CGDirectDisplayID: SCContentFilter] = [:]
 
     /// Starts recording. `rect` is in the display's point space with a top-left
     /// origin; nil records the whole display.
@@ -102,6 +105,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
 
                 var configuration = setup.configuration
                 if followsScreens {
+                    self.followFilters = ScreenGrabber.displayFilters(in: found.content)
                     // One 16:9 picture for every screen. These settings name no
                     // particular part of a screen, so whichever screen the
                     // stream is pointed at is captured whole and scaled to fit
@@ -220,6 +224,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
         }
         followMonitor = nil
         currentDisplayID = nil
+        followFilters.removeAll()
         isSwitching = false
         RecordingPill.shared.hide()
         borderPanel?.orderOut(nil)
@@ -245,13 +250,22 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
         isSwitching = true
         Task { @MainActor in
             do {
-                let found = try await ScreenGrabber.locateDisplay(displayID)
-                let setup = try ScreenGrabber.regionSetup(
-                    display: found.display, content: found.content, rect: nil, showCursor: true
-                )
                 // Only the screen changes. The stream's settings stay as they
                 // are, and they capture whichever screen this is in full.
-                try await stream.updateContentFilter(setup.filter)
+                let filter: SCContentFilter
+                if let ready = self.followFilters[displayID] {
+                    filter = ready
+                } else {
+                    // A screen connected after the recording began.
+                    let found = try await ScreenGrabber.locateDisplay(displayID)
+                    let filters = ScreenGrabber.displayFilters(in: found.content)
+                    self.followFilters = filters
+                    guard let fresh = filters[displayID] else {
+                        throw KiwiError("That display is no longer available.")
+                    }
+                    filter = fresh
+                }
+                try await stream.updateContentFilter(filter)
                 if self.isRecording {
                     self.currentDisplayID = displayID
                     if let moved = NSScreen.matching(displayID) {

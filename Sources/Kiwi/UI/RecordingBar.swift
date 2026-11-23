@@ -224,7 +224,9 @@ final class RecordingPill: NSObject {
         pill.appear(at: NSRect(x: area.midX - size.width / 2, y: area.minY + 8, width: size.width, height: size.height))
         panel = pill
 
-        let tick = Timer(timeInterval: 0.5, target: self, selector: #selector(update), userInfo: nil, repeats: true)
+        let tick = Timer(timeInterval: 1, target: self, selector: #selector(update), userInfo: nil, repeats: true)
+        // Some slack lets macOS fire this together with other timers.
+        tick.tolerance = 0.2
         RunLoop.main.add(tick, forMode: .common)
         timer = tick
     }

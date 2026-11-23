@@ -86,6 +86,17 @@ enum ScreenGrabber {
         return (filter, configuration, scale, area)
     }
 
+    /// A whole-screen filter for every display, each leaving Kiwi's own windows out.
+    static func displayFilters(in content: SCShareableContent) -> [CGDirectDisplayID: SCContentFilter] {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        let kiwi = content.applications.filter { $0.processID == ownPID }
+        var filters: [CGDirectDisplayID: SCContentFilter] = [:]
+        for display in content.displays {
+            filters[display.displayID] = SCContentFilter(display: display, excludingApplications: kiwi, exceptingWindows: [])
+        }
+        return filters
+    }
+
     /// Fresh display lookup for long-running sessions (scrolling capture, recording).
     static func locateDisplay(_ displayID: CGDirectDisplayID) async throws -> (display: SCDisplay, content: SCShareableContent) {
         let content = try await shareableContent()
