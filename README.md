@@ -179,7 +179,7 @@ With the default signing (the local `Kiwi Local` identity, or ad hoc) the result
 
 ## Design notes
 
-- **Light by default.** An AppKit agent with no Dock icon, no background polling and no dependencies. Timers run only during a file drag, a scrolling capture or a recording.
+- **Light by default.** An AppKit agent with no Dock icon, no background polling and no dependencies. Timers run only during a file drag, a scrolling capture or a recording. A screenshot stays in memory only while its editor or preview is open; afterwards Kiwi reads it back from its working copy when you ask for it.
 - **Minimal permissions.** Screen Recording is the only permission Kiwi needs. The microphone is asked for only if you turn on microphone recording.
 - **Native glass.** Floating UI uses the system Liquid Glass material, hosted in non-activating panels so the app you are working in keeps focus. Motion respects Reduce Motion.
 - **Secure by construction.** Hardened runtime, a single entitlement (the optional microphone), no network code, strict memory safety checks, and a verify script that proves it on every build.

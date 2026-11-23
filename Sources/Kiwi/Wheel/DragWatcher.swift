@@ -17,6 +17,8 @@ final class DragWatcher: NSObject {
     private var mouseIsDown = false
     private var fileDragActive = false
     private var pasteboardCountAtMouseDown = 0
+    private var mouseDownAt: TimeInterval = 0
+    private var lastCheckAt: TimeInterval = 0
     private var previousFlags: NSEvent.ModifierFlags = []
 
     private let watched: NSEvent.ModifierFlags = [.shift, .command, .control]
@@ -60,11 +62,20 @@ final class DragWatcher: NSObject {
     private func mouseDown() {
         mouseIsDown = true
         fileDragActive = false
+        mouseDownAt = ProcessInfo.processInfo.systemUptime
+        lastCheckAt = 0
         pasteboardCountAtMouseDown = NSPasteboard(name: .drag).changeCount
     }
 
     private func mouseDragged() {
         guard mouseIsDown, !fileDragActive else { return }
+        // This runs for every pointer movement of every drag on the Mac, so
+        // it does as little as possible: a file drag puts its files on the
+        // drag pasteboard as it begins, so only the first seconds of a drag
+        // are worth looking at, and a few looks a second are plenty.
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - mouseDownAt < 3, now - lastCheckAt > 0.08 else { return }
+        lastCheckAt = now
         let pasteboard = NSPasteboard(name: .drag)
         guard pasteboard.changeCount != pasteboardCountAtMouseDown else { return }
         // A new drag has started. Only file drags are interesting.

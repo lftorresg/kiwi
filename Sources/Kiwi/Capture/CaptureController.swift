@@ -7,7 +7,13 @@ final class CaptureController {
     static let shared = CaptureController()
 
     private let selection = SelectionController()
-    private(set) var last: Capture?
+    /// The latest capture, while something still has it open. It is held
+    /// weakly on purpose: the editor or the corner preview keeps it alive
+    /// while it is on screen, and after that it is read back from its working
+    /// copy when needed. A full-size screenshot is tens of megabytes, and
+    /// should not sit in memory for as long as Kiwi runs.
+    private(set) weak var last: Capture?
+    private var lastID: UUID?
 
     /// The latest screenshots of this session, newest first. They live in the
     /// cache, so the list is empty again after Kiwi quits.
@@ -40,6 +46,8 @@ final class CaptureController {
     func editLast() {
         if let last {
             edit(last)
+        } else if let lastID, recents.contains(where: { $0.id == lastID }) {
+            reopen(lastID)
         } else {
             Toast.show("No capture yet", symbol: "camera.viewfinder")
         }
@@ -243,6 +251,7 @@ final class CaptureController {
         let prefs = Prefs.shared
         let capture = Capture(image: image, scale: scale)
         last = capture
+        lastID = capture.id
         remember(capture)
         if prefs.editAfterCapture {
             PreviewHUD.shared.dismiss(animated: false)
@@ -410,6 +419,7 @@ final class CaptureController {
         }
         Clipboard.clear(ifStampIs: capture.clipboardStamp)
         if last === capture { last = nil }
+        if lastID == capture.id { lastID = nil }
         forget(capture.id)
         PreviewHUD.shared.dismiss(ifShowing: capture)
         Toast.show("Deleted", symbol: "trash.fill")
@@ -510,11 +520,17 @@ final class CaptureController {
     }
 
     func pinLast() {
-        guard let last else {
+        if let last {
+            PinController.shared.pin(last.image, scale: last.scale)
+            return
+        }
+        guard let lastID, let record = recents.first(where: { $0.id == lastID }),
+              let source = CGImageSourceCreateWithURL(record.cacheURL as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
             Toast.show("No capture yet", symbol: "camera.viewfinder")
             return
         }
-        PinController.shared.pin(last.image, scale: last.scale)
+        PinController.shared.pin(image, scale: record.scale)
     }
 
     func revealSaveFolder() {
