@@ -66,7 +66,7 @@ enum PDFEngine {
     }
 
     /// Draws a page on white at twice its point size (144 dpi), capped at `maxPixel`.
-    private static func render(_ page: PDFPage) throws -> CGImage {
+    static func render(_ page: PDFPage) throws -> CGImage {
         var size = page.bounds(for: .mediaBox).size
         if page.rotation % 180 != 0 {
             size = CGSize(width: size.height, height: size.width)
@@ -91,6 +91,21 @@ enum PDFEngine {
             throw KiwiError("Couldn't render a page.")
         }
         return image
+    }
+
+    // MARK: Word document
+
+    /// A Word document with the PDF's structure rebuilt: flowing paragraphs,
+    /// headings, bullet lists, tables, pictures and links. See `PDFToDocx`.
+    static func docx(of url: URL, progress: ProgressHandler) throws -> URL {
+        let document = try open(url)
+        let rebuilt = try PDFToDocx.convert(document, progress: progress)
+        guard !rebuilt.blocks.isEmpty else {
+            throw KiwiError("\(url.lastPathComponent) has nothing Kiwi can convert.")
+        }
+        let output = ImageEngine.outputURL(for: url, fileExtension: "docx")
+        try DocxWriter.data(for: rebuilt).write(to: output, options: .atomic)
+        return output
     }
 
     // MARK: Text

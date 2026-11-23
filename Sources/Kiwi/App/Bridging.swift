@@ -67,6 +67,19 @@ enum Trash {
     }
 }
 
+enum TextAttributes {
+    /// The font and colour of each stretch of an attributed string, in order.
+    static func styles(of text: NSAttributedString) -> [(range: NSRange, font: NSFont?, color: NSColor?)] {
+        var styles: [(range: NSRange, font: NSFont?, color: NSColor?)] = []
+        // Flagged only because the callback is handed a "stop" flag through a
+        // pointer. This code never touches it.
+        unsafe text.enumerateAttributes(in: NSRange(location: 0, length: text.length), options: []) { attributes, range, _ in
+            styles.append((range, attributes[.font] as? NSFont, attributes[.foregroundColor] as? NSColor))
+        }
+        return styles
+    }
+}
+
 enum DocumentBridge {
     /// Reads a document as exactly the given type.
     static func read(_ url: URL, as type: NSAttributedString.DocumentType) throws -> NSAttributedString {
