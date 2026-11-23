@@ -16,6 +16,34 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
     private(set) var startedAt: Date?
     /// The most recent finished recording of this session.
     private(set) var lastURL: URL?
+    /// This session's recordings, newest first.
+    private(set) var recent: [URL] = []
+    /// Called whenever the list of recordings changes.
+    var onRecentChange: (() -> Void)?
+
+    private func remember(_ url: URL) {
+        recent.removeAll { $0.path == url.path }
+        recent.insert(url, at: 0)
+        if recent.count > 8 { recent.removeLast() }
+        lastURL = url
+        onRecentChange?()
+    }
+
+    /// A recording was deleted.
+    func forget(_ url: URL) {
+        recent.removeAll { $0.path == url.path }
+        if lastURL?.path == url.path { lastURL = recent.first }
+        onRecentChange?()
+    }
+
+    /// A recording was saved again under a (possibly) different name.
+    func replace(_ old: URL, with new: URL) {
+        if let index = recent.firstIndex(where: { $0.path == old.path }) {
+            recent[index] = new
+        }
+        if lastURL?.path == old.path { lastURL = new }
+        onRecentChange?()
+    }
 
     private var isBusy = false
     private var didFinishWriting = false
@@ -126,7 +154,11 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
                 Toast.error("The recording could not be saved")
                 return
             }
-            self.lastURL = url
+            self.remember(url)
+            if Prefs.shared.editAfterCapture {
+                VideoEditorCoordinator.shared.open(url)
+                return
+            }
             let thumbnail = await Self.thumbnail(for: url)
             PreviewHUD.shared.showRecording(at: url, thumbnail: thumbnail, on: screen)
         }

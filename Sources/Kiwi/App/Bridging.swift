@@ -44,6 +44,15 @@ enum Coordination {
     }
 }
 
+enum Trash {
+    /// Moves a file to the Trash and waits until it is there.
+    static func move(_ url: URL) throws {
+        // Flagged only because the call can report where the file ended up
+        // through a pointer. Passing nil asks for nothing back.
+        try unsafe FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    }
+}
+
 enum DocumentBridge {
     /// Reads a document as exactly the given type.
     static func read(_ url: URL, as type: NSAttributedString.DocumentType) throws -> NSAttributedString {

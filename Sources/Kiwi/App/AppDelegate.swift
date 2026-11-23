@@ -19,6 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CaptureController.shared.onRecentsChange = { [weak self] in
             self?.rebuildStatusMenu()
         }
+        RecordingController.shared.onRecentChange = { [weak self] in
+            self?.rebuildStatusMenu()
+        }
         RecordingController.shared.onStateChange = { [weak self] recording in
             self?.recordingStateChanged(recording)
         }
@@ -125,7 +128,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.image = NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil)
         let submenu = NSMenu()
         let recents = CaptureController.shared.recents
-        if recents.isEmpty {
+        let recordings = RecordingController.shared.recent.filter { FileManager.default.fileExists(atPath: $0.path) }
+        if recents.isEmpty, recordings.isEmpty {
             let empty = NSMenuItem(title: "No captures yet", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             submenu.addItem(empty)
@@ -137,8 +141,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             entry.image = record.thumbnail
             submenu.addItem(entry)
         }
+        if !recents.isEmpty, !recordings.isEmpty {
+            submenu.addItem(.separator())
+        }
+        for url in recordings {
+            let entry = NSMenuItem(title: url.lastPathComponent, action: #selector(openRecording(_:)), keyEquivalent: "")
+            entry.target = self
+            entry.representedObject = url.path
+            entry.image = NSImage(systemSymbolName: "film", accessibilityDescription: nil)
+            submenu.addItem(entry)
+        }
         item.submenu = submenu
         return item
+    }
+
+    @objc private func openRecording(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        VideoEditorCoordinator.shared.open(URL(fileURLWithPath: path))
     }
 
     @objc private func openRecent(_ sender: NSMenuItem) {

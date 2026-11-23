@@ -119,6 +119,25 @@ enum MediaEngine {
         }
     }
 
+    /// A copy of the video with only `range` kept and, when `muted`, no
+    /// sound. It keeps the original's container and avoids re-encoding when
+    /// it can. The copy is written beside the original under a new name.
+    static func exportEdited(
+        _ url: URL, range: CMTimeRange?, muted: Bool, progress: @escaping ProgressHandler
+    ) async throws -> URL {
+        let original = AVURLAsset(url: url)
+        var asset: AVAsset = original
+        if muted {
+            asset = try await videoOnlyCopy(of: original)
+        }
+        let keepsMP4 = ["mp4", "m4v"].contains(url.pathExtension.lowercased())
+        return try await export(
+            asset, beside: url, presets: [AVAssetExportPresetPassthrough, AVAssetExportPresetHighestQuality],
+            type: keepsMP4 ? .mp4 : .mov, fileExtension: keepsMP4 ? "mp4" : "mov",
+            timeRange: range, progress: progress
+        )
+    }
+
     /// Tries each preset in turn and returns the first export that works.
     private static func export(
         _ asset: AVAsset,
@@ -126,6 +145,7 @@ enum MediaEngine {
         presets: [String],
         type: AVFileType,
         fileExtension: String,
+        timeRange: CMTimeRange? = nil,
         progress: @escaping ProgressHandler
     ) async throws -> URL {
         var failure: Error = KiwiError("\(source.lastPathComponent) can't be converted to that format.")
@@ -133,6 +153,9 @@ enum MediaEngine {
             try Task.checkCancellation()
             guard let session = AVAssetExportSession(asset: asset, presetName: preset) else { continue }
             let output = ImageEngine.outputURL(for: source, fileExtension: fileExtension)
+            if let timeRange {
+                session.timeRange = timeRange
+            }
 
             let monitor = Task {
                 for await state in session.states(updateInterval: 0.25) {

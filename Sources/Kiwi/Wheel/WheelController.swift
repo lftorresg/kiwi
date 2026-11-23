@@ -255,11 +255,13 @@ enum WheelRunner {
             copyText(from: urls)
 
         case .edit:
-            guard let first = urls.first(where: ImageEngine.isImage) else {
-                Toast.error("Edit works with images")
-                return
+            if let image = urls.first(where: ImageEngine.isImage) {
+                EditorCoordinator.shared.open(fileURL: image)
+            } else if let video = urls.first(where: MediaEngine.isVideo) {
+                VideoEditorCoordinator.shared.open(video)
+            } else {
+                Toast.error("Edit works with images and videos")
             }
-            EditorCoordinator.shared.open(fileURL: first)
 
         case .share:
             break // handled by WheelController, which owns the anchor view

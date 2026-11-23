@@ -91,6 +91,15 @@ While recording, a Stop pill with the elapsed time floats at the bottom of the s
 
 Recordings are MP4 (MOV when the microphone is on) at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio and the microphone are both optional and off by default. The first time you turn the microphone on, macOS asks for permission. The red outline and Kiwi's own windows never appear in the video.
 
+**Video editor.** When a recording stops it opens in Kiwi's video editor (or, with *Open the editor right after a capture* off, in the corner preview; click its thumbnail for the editor). The toolbar has:
+
+- **Trim**: the system trim bar appears; drag the yellow handles and press Trim.
+- **Mute**: removes the sound.
+- **Save**: writes the trimmed or muted version in place of the recording. The untouched recording goes to the Trash, so it can be recovered.
+- **Copy**, **GIF**, **Convert** (MP4, HEVC, MOV, audio only), **Show** in Finder, and **Delete**, which moves the recording to the Trash.
+
+Recordings from this session are listed under *Recent Captures* in the menu, so you can reopen or delete one later. Dropping a video on the wheel's Edit slice opens it in the same editor.
+
 **GIF.** The preview that appears after a recording has a GIF button, and the menu has *Make GIF of Last Recording*. The GIF is written next to the video and loops. To keep the file reasonable it is at most 640 px on its longest side and 180 frames: 12 frames a second for clips up to 15 seconds, fewer for longer ones.
 
 ## Editor
@@ -137,7 +146,7 @@ While dragging one or more files, tap a key to open a ring. The slices depend on
 | Dragging | ⇧ Convert | ⌘ Tools |
 | --- | --- | --- |
 | Images | PNG, JPEG, HEIC, AVIF, TIFF, PDF | Half size, Fit 1920, Compress, Strip info, Redact, Edit |
-| Videos | MP4, HEVC, MOV, GIF, Audio (M4A) | Compress, 1080p, 720p, Mute |
+| Videos | MP4, HEVC, MOV, GIF, Audio (M4A) | Compress, 1080p, 720p, Mute, Edit |
 | Audio | M4A, WAV, AIFF, FLAC | |
 | PDFs | PNG, JPEG (one image per page), Text | Merge, Split |
 | Documents (DOCX, DOC, RTF, ODT, TXT) | PDF, DOCX, RTF, ODT, TXT, HTML | |

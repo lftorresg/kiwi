@@ -164,6 +164,7 @@ enum WheelRing: String {
                 WheelItem(id: "v-1080", title: "1080p", symbol: "aspectratio", action: .video(.fit1080)),
                 WheelItem(id: "v-720", title: "720p", symbol: "arrow.down.right.and.arrow.up.left", action: .video(.fit720)),
                 WheelItem(id: "v-mute", title: "Mute", symbol: "speaker.slash", action: .video(.mute)),
+                WheelItem(id: "v-edit", title: "Edit", symbol: "scissors", action: .edit),
             ]
         case .pdf:
             return [

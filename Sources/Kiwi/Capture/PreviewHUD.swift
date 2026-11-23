@@ -57,6 +57,7 @@ final class PreviewHUD {
                 },
                 onDelete: { [weak self] in
                     NSWorkspace.shared.recycle([url])
+                    RecordingController.shared.forget(url)
                     self?.dismiss()
                     Toast.show("Recording moved to Trash", symbol: "trash.fill")
                 },
@@ -301,7 +302,7 @@ private struct RecordingHUDView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 18))
         .contentShape(Rectangle())
         .onTapGesture {
-            NSWorkspace.shared.open(fileURL)
+            VideoEditorCoordinator.shared.open(fileURL)
         }
         .onDrag {
             NSItemProvider(contentsOf: fileURL) ?? NSItemProvider()
