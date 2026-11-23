@@ -186,10 +186,10 @@ Sources/Kiwi/
   App/        entry point, menu bar item, hotkeys and shortcuts, preferences
   Capture/    selection overlay, grabber, scrolling capture, recorder, preview, pins
   Redaction/  sensitive-text patterns and the on-device scanner
-  Editor/     annotation model and renderer, canvas, backdrops, editor window
+  Editor/     annotation model and renderer, canvas, backdrops, image and video editor windows
   Wheel/      drag watcher, wheel model and view, drop handling
   Engine/     image, video, audio, PDF and document conversion, GIF, ZIP, checksums
-  UI/         shared panels, toast, progress panel, settings, shortcut recorder, setup guide
+  UI/         shared panels, toast, progress panel, recording bar, settings, shortcut recorder, setup guide
 Resources/    Info.plist, entitlements, app icon
 scripts/      verify.sh, setup-signing.sh, release.sh
 ```

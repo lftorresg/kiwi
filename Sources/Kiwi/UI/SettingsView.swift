@@ -66,7 +66,7 @@ final class WindowRouter: NSObject, NSWindowDelegate {
         if settingsWindow == nil {
             settingsWindow = makeWindow(
                 title: "Kiwi Settings",
-                size: NSSize(width: 500, height: 680),
+                size: NSSize(width: 560, height: 600),
                 content: SettingsView(prefs: Prefs.shared, status: status)
             )
         }
@@ -113,16 +113,38 @@ struct SettingsView: View {
     @ObservedObject var status: SystemStatus
 
     var body: some View {
+        TabView {
+            tab("General", "gearshape") {
+                screenshotsSection
+                systemSection
+            }
+            tab("Redaction", "eye.slash") {
+                redactionSection
+            }
+            tab("Recording", "record.circle") {
+                recordingSection
+            }
+            tab("Wheel", "circle.dashed") {
+                wheelSection
+            }
+            tab("Shortcuts", "keyboard") {
+                shortcutsSection
+            }
+        }
+        .onAppear { status.refresh() }
+    }
+
+    /// One settings pane: a grouped form under a labelled tab.
+    private func tab<Content: View>(
+        _ title: String, _ symbol: String, @ViewBuilder content: () -> Content
+    ) -> some View {
         Form {
-            screenshotsSection
-            redactionSection
-            recordingSection
-            wheelSection
-            shortcutsSection
-            systemSection
+            content()
         }
         .formStyle(.grouped)
-        .onAppear { status.refresh() }
+        .tabItem {
+            Label(title, systemImage: symbol)
+        }
     }
 
     private var screenshotsSection: some View {
