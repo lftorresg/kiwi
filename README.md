@@ -90,11 +90,13 @@ Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches ea
 - **Area**: drag over the part of the screen you want.
 - **Window**: click the window you want. Kiwi records the place the window is in, so keep it where it is.
 - **Screen**: the whole screen. With more than one screen connected, a menu next to it lets you pick which.
-- **Follow Me** (shown with more than one screen): records the screen you are using and switches to another one when you click on it. The video keeps the size of the screen it started on; a screen with a different shape is scaled to fit.
+- **Follow Me** (shown with more than one screen): records the screen you are using and switches to another one when you click on it. The video is a standard 16:9 picture; each screen is scaled to fit it and centred on black, so an ultrawide monitor and a laptop screen both look right in the same recording.
+
+The menu in the bar sets the **resolution** (Native, 4K, 1440p, 1080p or 720p) and the **frame rate** (60 or 30 fps); the same choices are in Settings → Recording. Lower values are lighter on the Mac while recording and make smaller files.
 
 While recording, a Stop pill with the elapsed time floats at the bottom of the screen. Click it, press ⇧⌘5 again, or click the timer in the menu bar to stop. You can drag the pill out of the way; like every Kiwi window, it never appears in the video.
 
-Recordings are MP4 (MOV when the microphone is on) at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio and the microphone are both optional and off by default. The first time you turn the microphone on, macOS asks for permission. The red outline and Kiwi's own windows never appear in the video.
+Recordings are MP4 (MOV when the microphone is on) at 60 or 30 fps, at the resolution you choose and 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio and the microphone are both optional and off by default. The first time you turn the microphone on, macOS asks for permission. The red outline and Kiwi's own windows never appear in the video.
 
 **Video editor.** When a recording stops it opens in Kiwi's video editor (or, with *Open the editor right after a capture* off, in the corner preview; click its thumbnail for the editor). The toolbar has:
 

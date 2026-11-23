@@ -57,6 +57,10 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
     private var followMonitor: Any?
     private var currentDisplayID: CGDirectDisplayID?
     private var isSwitching = false
+    /// The live stream settings and the size of the video, kept so the
+    /// picture can be laid out again when the recording moves to another screen.
+    private var configuration: SCStreamConfiguration?
+    private var canvas: CGSize?
 
     /// Starts recording. `rect` is in the display's point space with a top-left
     /// origin; nil records the whole display.
@@ -86,6 +90,9 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
         let systemAudio = Prefs.shared.recordSystemAudio
         let wantsMicrophone = Prefs.shared.recordMicrophone
         let useHEVC = Prefs.shared.recordHEVC
+        let maxHeight = Prefs.shared.recordMaxHeight
+        let frameRate = Prefs.shared.recordFrameRate
+        let followsScreens = follows && rect == nil
         let folder = Prefs.shared.saveFolderURL
 
         Task { @MainActor in
@@ -98,11 +105,26 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
                 )
 
                 let configuration = setup.configuration
-                let size = Self.videoSize(width: configuration.width, height: configuration.height)
-                configuration.width = size.width
-                configuration.height = size.height
+                if followsScreens {
+                    // One 16:9 picture for every screen. Each screen is scaled
+                    // to fit and centred on black, so screens of different
+                    // shapes and sizes all look right in the same video.
+                    let screenPixels = CGSize(width: configuration.width, height: configuration.height)
+                    let frame = Self.followCanvas(maxHeight: maxHeight)
+                    configuration.width = Int(frame.width)
+                    configuration.height = Int(frame.height)
+                    configuration.destinationRect = Self.fitted(screenPixels, in: frame)
+                    configuration.backgroundColor = CGColor(gray: 0, alpha: 1)
+                    self.canvas = frame
+                } else {
+                    let size = Self.videoSize(
+                        width: configuration.width, height: configuration.height, maxHeight: maxHeight
+                    )
+                    configuration.width = size.width
+                    configuration.height = size.height
+                }
                 configuration.scalesToFit = true
-                configuration.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+                configuration.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(frameRate))
                 configuration.queueDepth = 6
                 configuration.capturesAudio = systemAudio
                 configuration.excludesCurrentProcessAudio = true
@@ -137,6 +159,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
                 self.stream = stream
                 self.output = output
                 self.outputURL = url
+                self.configuration = configuration
                 self.startedAt = Date()
                 self.isBusy = false
                 self.isRecording = true
@@ -198,6 +221,8 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
         }
         followMonitor = nil
         currentDisplayID = nil
+        configuration = nil
+        canvas = nil
         isSwitching = false
         RecordingPill.shared.hide()
         borderPanel?.orderOut(nil)
@@ -227,6 +252,15 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
                 let setup = try ScreenGrabber.regionSetup(
                     display: found.display, content: found.content, rect: nil, showCursor: true
                 )
+                // Lay the new screen out in the same picture: its whole area,
+                // scaled to fit and centred.
+                if let configuration = self.configuration, let frame = self.canvas {
+                    configuration.sourceRect = setup.configuration.sourceRect
+                    configuration.destinationRect = Self.fitted(
+                        CGSize(width: setup.configuration.width, height: setup.configuration.height), in: frame
+                    )
+                    try await stream.updateConfiguration(configuration)
+                }
                 try await stream.updateContentFilter(setup.filter)
                 if self.isRecording {
                     self.currentDisplayID = displayID
@@ -292,15 +326,46 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate, SCStreamDe
     }
 
     /// H.264 wants even dimensions and is happiest at 4K or below.
-    static func videoSize(width: Int, height: Int) -> (width: Int, height: Int) {
+    /// `maxHeight` is the user's resolution limit; 0 means none.
+    static func videoSize(width: Int, height: Int, maxHeight limit: Int = 0) -> (width: Int, height: Int) {
         let maxWidth = 3840.0
-        let maxHeight = 2160.0
+        let maxHeight = limit > 0 ? min(2160.0, Double(limit)) : 2160.0
         let w = Double(max(2, width))
         let h = Double(max(2, height))
         let fit = min(1, maxWidth / w, maxHeight / h)
         let evenWidth = max(2, Int((w * fit) / 2) * 2)
         let evenHeight = max(2, Int((h * fit) / 2) * 2)
         return (evenWidth, evenHeight)
+    }
+
+    /// The 16:9 picture a recording that follows the user is laid out in. It
+    /// is as tall as the resolution limit allows, and never taller than the
+    /// smallest connected screen, so nothing has to be enlarged.
+    static func followCanvas(maxHeight limit: Int) -> CGSize {
+        var height: CGFloat = limit > 0 ? CGFloat(limit) : 2160
+        for screen in NSScreen.screens {
+            height = min(height, (screen.frame.height * screen.backingScaleFactor).rounded())
+        }
+        height = max(360, (height / 2).rounded(.down) * 2)
+        let width = (height * 16 / 9 / 2).rounded(.down) * 2
+        return CGSize(width: width, height: height)
+    }
+
+    /// Where a picture of size `source` goes inside `frame`: as large as it
+    /// fits without changing shape, and centred.
+    static func fitted(_ source: CGSize, in frame: CGSize) -> CGRect {
+        guard source.width > 0, source.height > 0 else {
+            return CGRect(origin: .zero, size: frame)
+        }
+        let scale = min(frame.width / source.width, frame.height / source.height)
+        let width = (source.width * scale).rounded(.down)
+        let height = (source.height * scale).rounded(.down)
+        return CGRect(
+            x: ((frame.width - width) / 2).rounded(.down),
+            y: ((frame.height - height) / 2).rounded(.down),
+            width: width,
+            height: height
+        )
     }
 
     private static func thumbnail(for url: URL) async -> NSImage? {

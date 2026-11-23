@@ -26,6 +26,8 @@ final class Prefs: ObservableObject {
         static let recordMicrophone = "recordMicrophone"
         static let excludedApps = "excludedApps"
         static let recordTarget = "recordTarget"
+        static let recordMaxHeight = "recordMaxHeight"
+        static let recordFrameRate = "recordFrameRate"
     }
 
     @Published var copyOnCapture: Bool {
@@ -81,6 +83,22 @@ final class Prefs: ObservableObject {
     /// Record your voice along with the screen. Off unless you turn it on.
     @Published var recordMicrophone: Bool {
         didSet { UserDefaults.standard.set(recordMicrophone, forKey: Key.recordMicrophone) }
+    }
+
+    /// Tallest video Kiwi records, in pixels. 0 keeps the screen's own
+    /// resolution (up to 4K). Smaller is lighter on the Mac and on disk.
+    @Published var recordMaxHeight: Int {
+        didSet { UserDefaults.standard.set(recordMaxHeight, forKey: Key.recordMaxHeight) }
+    }
+    /// Frames a second: 60 is smoother, 30 takes about half the work.
+    @Published var recordFrameRate: Int {
+        didSet { UserDefaults.standard.set(recordFrameRate, forKey: Key.recordFrameRate) }
+    }
+
+    /// For menus: "1080p · 30 fps".
+    var recordQualityTitle: String {
+        let size = recordMaxHeight == 0 ? "Native" : "\(recordMaxHeight)p"
+        return "\(size) · \(recordFrameRate) fps"
     }
 
     /// What the recording bar was last set to record.
@@ -166,6 +184,8 @@ final class Prefs: ObservableObject {
             Key.editAfterCapture: true,
             Key.recordHEVC: true,
             Key.recordMicrophone: false,
+            Key.recordMaxHeight: 0,
+            Key.recordFrameRate: 60,
         ])
 
         copyOnCapture = defaults.bool(forKey: Key.copyOnCapture)
@@ -187,6 +207,9 @@ final class Prefs: ObservableObject {
         recordHEVC = defaults.bool(forKey: Key.recordHEVC)
         recordMicrophone = defaults.bool(forKey: Key.recordMicrophone)
         excludedApps = defaults.stringArray(forKey: Key.excludedApps) ?? []
+        let storedHeight = defaults.integer(forKey: Key.recordMaxHeight)
+        recordMaxHeight = [0, 720, 1080, 1440, 2160].contains(storedHeight) ? storedHeight : 0
+        recordFrameRate = defaults.integer(forKey: Key.recordFrameRate) == 30 ? 30 : 60
         recordTarget = RecordTarget(rawValue: defaults.string(forKey: Key.recordTarget) ?? "") ?? .area
         shortcuts = Prefs.decodeShortcuts(defaults.dictionary(forKey: Key.shortcuts) ?? [:])
     }

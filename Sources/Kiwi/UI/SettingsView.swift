@@ -191,6 +191,20 @@ struct SettingsView: View {
 
     private var recordingSection: some View {
         Section("Recording") {
+            Picker("Resolution", selection: $prefs.recordMaxHeight) {
+                Text("Native").tag(0)
+                Text("4K (2160p)").tag(2160)
+                Text("1440p").tag(1440)
+                Text("1080p").tag(1080)
+                Text("720p").tag(720)
+            }
+            Picker("Frame rate", selection: $prefs.recordFrameRate) {
+                Text("60 fps").tag(60)
+                Text("30 fps").tag(30)
+            }
+            Text("Native keeps the screen's own resolution, up to 4K. A lower resolution and 30 fps make recording lighter on the Mac and the files smaller.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
             Toggle("Record in HEVC", isOn: $prefs.recordHEVC)
             Text("HEVC is sharper at a smaller size. Turn it off for H.264, which plays in more apps and on older devices.")
                 .font(.callout)

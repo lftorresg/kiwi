@@ -126,6 +126,26 @@ private struct RecordingBarView: View {
                     .help("Which screen to record")
                 }
 
+                Menu {
+                    Picker("Resolution", selection: $prefs.recordMaxHeight) {
+                        Text("Native").tag(0)
+                        Text("4K (2160p)").tag(2160)
+                        Text("1440p").tag(1440)
+                        Text("1080p").tag(1080)
+                        Text("720p").tag(720)
+                    }
+                    .pickerStyle(.inline)
+                    Picker("Frame Rate", selection: $prefs.recordFrameRate) {
+                        Text("60 fps").tag(60)
+                        Text("30 fps").tag(30)
+                    }
+                    .pickerStyle(.inline)
+                } label: {
+                    Text(prefs.recordQualityTitle)
+                }
+                .fixedSize()
+                .help("Resolution and frame rate. Smaller and slower is lighter on the Mac.")
+
                 Toggle(isOn: $prefs.recordMicrophone) {
                     Image(systemName: prefs.recordMicrophone ? "mic.fill" : "mic.slash")
                 }
