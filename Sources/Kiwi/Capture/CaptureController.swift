@@ -136,7 +136,8 @@ final class CaptureController {
         }
     }
 
-    /// Recording: press once to pick the area and start, again to stop.
+    /// Recording: press once for the recording bar, again to stop a recording
+    /// (or to close the bar).
     func toggleRecording() {
         let recorder = RecordingController.shared
         if recorder.isRecording {
@@ -144,8 +145,22 @@ final class CaptureController {
             return
         }
         guard !ScrollCaptureController.shared.isActive else { return }
-        selectRegion { displayID, rect, screen in
-            recorder.start(displayID: displayID, rect: rect, screen: screen)
+        guard RecordingBar.shared.isVisible || ensurePermission() else { return }
+        RecordingBar.shared.toggle()
+    }
+
+    /// Starts a recording as the recording bar was set up.
+    func beginRecording(wholeScreen: Bool) {
+        let recorder = RecordingController.shared
+        guard !recorder.isRecording, !ScrollCaptureController.shared.isActive else { return }
+        if wholeScreen {
+            guard ensurePermission() else { return }
+            guard let screen = NSScreen.underMouse, let displayID = screen.displayID else { return }
+            recorder.start(displayID: displayID, rect: nil, screen: screen)
+        } else {
+            selectRegion { displayID, rect, screen in
+                recorder.start(displayID: displayID, rect: rect, screen: screen)
+            }
         }
     }
 

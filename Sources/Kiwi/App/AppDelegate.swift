@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(menuItem("Scrolling Capture", #selector(captureScrolling), keys: .captureScrolling, symbol: "arrow.down.to.line.compact"))
         menu.addItem(delayedCaptureItem())
         menu.addItem(.separator())
-        menu.addItem(menuItem("Record Area", #selector(recordArea), keys: .record, symbol: "record.circle"))
+        menu.addItem(menuItem("Record…", #selector(recordArea), keys: .record, symbol: "record.circle"))
         menu.addItem(menuItem("Record Screen", #selector(recordScreen), symbol: "menubar.dock.rectangle"))
         menu.addItem(menuItem("Make GIF of Last Recording", #selector(gifLast), symbol: "photo.stack"))
         menu.addItem(.separator())

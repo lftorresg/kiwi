@@ -50,7 +50,7 @@ Kiwi opens a short setup guide:
 | --- | --- |
 | ⇧⌘4 | Capture an area. Space switches to window capture. Esc or right-click cancels. |
 | ⇧⌘3 | Capture the screen under the pointer |
-| ⇧⌘5 | Record an area or window. Press again, or click the menu bar timer, to stop. |
+| ⇧⌘5 | Open the recording bar. While recording, press again to stop. |
 | ⇧⌘6 | Scrolling capture. Pick the area, scroll, then press Done or ⇧⌘6 again. |
 | ⇧⌘2 | Open the last capture in the editor |
 
@@ -84,6 +84,10 @@ Detection is best effort. Look at the result before you share it. One known gap:
 Pick the region that scrolls, then scroll down at a steady pace. Kiwi matches each frame against the last one and appends only the new rows, so pausing or scrolling back up does no harm. Sticky headers and footers are kept once. If Kiwi loses track (you scrolled too fast), it says so: scroll back up a little and continue. Pages that move on their own, such as a playing video or an animation, are fine as long as the moving part is under about half of the area. The result goes through the normal preview, including auto-redaction.
 
 ## Recording
+
+⇧⌘5 opens a small bar at the bottom of the screen. Choose **Area or Window** or **Entire Screen**, switch the microphone and the Mac's sound on or off, and press **Record** (or Return; Esc closes the bar). For an area, drag it out, or press Space to pick a window, and recording starts.
+
+While recording, a Stop pill with the elapsed time floats at the bottom of the screen. Click it, press ⇧⌘5 again, or click the timer in the menu bar to stop. You can drag the pill out of the way; like every Kiwi window, it never appears in the video.
 
 Recordings are MP4 (MOV when the microphone is on) at up to 60 fps, scaled to 4K at most, written directly by ScreenCaptureKit. The codec is HEVC by default, with H.264 available in Settings for wider compatibility. System audio and the microphone are both optional and off by default. The first time you turn the microphone on, macOS asks for permission. The red outline and Kiwi's own windows never appear in the video.
 

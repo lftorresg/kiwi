@@ -38,6 +38,8 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
             border.orderFrontRegardless()
             borderPanel = border
         }
+        RecordingBar.shared.hide()
+        RecordingPill.shared.show(on: screen)
         let systemAudio = Prefs.shared.recordSystemAudio
         let wantsMicrophone = Prefs.shared.recordMicrophone
         let useHEVC = Prefs.shared.recordHEVC
@@ -132,6 +134,7 @@ final class RecordingController: NSObject, SCRecordingOutputDelegate {
 
     private func reset() {
         let wasRecording = isRecording
+        RecordingPill.shared.hide()
         borderPanel?.orderOut(nil)
         borderPanel = nil
         stream = nil

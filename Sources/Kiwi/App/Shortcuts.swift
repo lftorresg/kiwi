@@ -15,7 +15,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
         switch self {
         case .captureArea: return "Capture area or window"
         case .captureScreen: return "Capture full screen"
-        case .record: return "Record area (press again to stop)"
+        case .record: return "Record (press again to stop)"
         case .captureScrolling: return "Scrolling capture"
         case .editLast: return "Edit last capture"
         }
