@@ -346,6 +346,12 @@ enum WheelRunner {
                 try PDFEngine.images(of: url, format: format, quality: quality, progress: progress)
             }
 
+        case .pdfDocx:
+            each(urls, where: PDFEngine.isPDF, noun: "PDF",
+                 title: "Rebuilding as a Word document", verb: "Converted", suffix: "to DOCX") { url, progress in
+                try PDFEngine.docx(of: url, progress: progress)
+            }
+
         case .pdfText:
             each(urls, where: PDFEngine.isPDF, noun: "PDF",
                  title: "Extracting text", verb: "Extracted the text of", suffix: "") { url, _ in

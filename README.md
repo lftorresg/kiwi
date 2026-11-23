@@ -156,7 +156,7 @@ While dragging one or more files, tap a key to open a ring. The slices depend on
 | Images | PNG, JPEG, HEIC, AVIF, TIFF, PDF | Half size, Fit 1920, Compress, Strip info, Redact, Edit |
 | Videos | MP4, HEVC, MOV, GIF, Audio (M4A) | Compress, 1080p, 720p, Mute, Edit |
 | Audio | M4A, WAV, AIFF, FLAC | |
-| PDFs | PNG, JPEG (one image per page), Text | Merge, Split |
+| PDFs | PNG, JPEG (one image per page), DOCX, Text | Merge, Split |
 | Documents (DOCX, DOC, RTF, ODT, TXT) | PDF, DOCX, RTF, ODT, TXT, HTML | |
 | Anything else, or a mix | ZIP | |
 
@@ -165,6 +165,16 @@ While dragging one or more files, tap a key to open a ring. The slices depend on
 Drop on a slice to run it. Drop on the hub, or anywhere outside the wheel, to cancel. Keys that were already held when the drag began are ignored. The wheel learns what you are dragging only when the drag reaches it, so the slices appear a moment after the ring does.
 
 Results are written next to the originals with Finder-style names (`photo 2.jpg`). Originals are never modified or deleted, and one file failing does not stop the rest. The one exception is Rename, which renames the files themselves and never overwrites another file. Conversion quality is adjustable in Settings. Jobs that take a while show a progress panel with a Cancel button; Kiwi runs one job at a time.
+
+**PDF to DOCX** rebuilds the document instead of pasting each page in as a picture, so it stays editable in Word, Pages and Google Docs:
+
+- lines are joined back into paragraphs that reflow, with words that were split by a hyphen at a line end put back together;
+- larger or bold titles become real heading styles (so they show up in the outline), bullets become real list items, and text whose columns line up becomes a table;
+- bold, italic, colour, text size and links are kept;
+- photos, charts and diagrams are kept as pictures where they were, and a page with no readable text (a scan) is kept as one picture;
+- headers, footers and page numbers that repeat on every page are left out.
+
+It works from where each character sits on the page, by rules of thumb. Plain reports, contracts and articles come through well. Expect to tidy up multi-column pages, tables with merged or wrapped cells, numbered lists (the numbers are kept as typed text) and forms; scanned pages are not turned into text.
 
 Everything is done with the frameworks that ship with macOS, so the formats are the ones macOS can write: there is no MP3, WebM or MKV output. Documents keep text, fonts, colours, lists and simple tables; complex layouts may shift. Kiwi makes ZIP archives but does not unpack them.
 

@@ -48,6 +48,7 @@ enum WheelAction {
     // PDF and documents
     case pdfImages(ImageFormat)
     case pdfText
+    case pdfDocx
     case pdfMerge
     case pdfSplit
     case document(DocumentFormat)
@@ -129,6 +130,7 @@ enum WheelRing: String {
             return [
                 WheelItem(id: "pdf-png", title: "PNG", symbol: "photo", action: .pdfImages(.png)),
                 WheelItem(id: "pdf-jpeg", title: "JPEG", symbol: "photo.fill", action: .pdfImages(.jpeg)),
+                WheelItem(id: "pdf-docx", title: "DOCX", symbol: "doc.text", action: .pdfDocx),
                 WheelItem(id: "pdf-text", title: "Text", symbol: "text.alignleft", action: .pdfText),
             ]
         case .document:
